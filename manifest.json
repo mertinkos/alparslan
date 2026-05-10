@@ -1,37 +1,44 @@
 {
-   "action": {
-      "default_icon": {
-         "16": "icons/icon-16.png",
-         "48": "icons/icon-48.png"
-      },
-      "default_popup": "popup.html",
-      "default_title": "Alparslan"
-   },
-   "background": {
-      "service_worker": "background.js",
-      "type": "module"
-   },
-   "content_scripts": [ {
-      "js": [ "content.js" ],
-      "matches": [ "\u003Call_urls>" ],
-      "run_at": "document_idle"
-   } ],
-   "content_security_policy": {
-      "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'"
-   },
-   "default_locale": "tr",
-   "description": "__MSG_extensionDescription__",
-   "host_permissions": [ "\u003Call_urls>" ],
-   "icons": {
-      "128": "icons/icon-128.png",
+  "action": {
+    "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png"
-   },
-   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0SnWq3Cj3UdFYlt0wDq98skhJ7zGtACjC0fQvfEX9oVnl1uNRDoDZPPy99Oinbd8XneVXGyZoWiGS18+MXbtoE4A+2etySJSygfPzO83HT2X5dSHBQ3h8tpMyRqQ32sBjr5tg+ZvpQRwcu6uxJB3krinctrG0t1ZNKxci0LALvSV7HQ89UdfmmBLCaNj144Yhw58Pi6MN0qIfhLo5CDsXi8BezvquCCFTnzcNIi3fRI0pOB49RbBHRXb9ZekWLBVkVa4mQnv/lzac8VDrkR4QWMjyMFw1s0YdO7IokxuullQTt5148r0diWF2SvgmHNU80TBBSLQ+fCDVpKdntDwIQIDAQAB",
-   "manifest_version": 3,
-   "name": "__MSG_extensionName__",
-   "options_page": "options.html",
-   "permissions": [ "activeTab", "storage", "tabs", "alarms", "webRequest", "declarativeNetRequest" ],
-   "update_url": "https://clients2.google.com/service/update2/crx",
-   "version": "0.2.0"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Alparslan"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["\u003Call_urls>"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'"
+  },
+  "default_locale": "tr",
+  "description": "__MSG_extensionDescription__",
+  "host_permissions": ["\u003Call_urls>"],
+  "icons": {
+    "128": "icons/icon-128.png",
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png"
+  },
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "options_page": "options.html",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "alarms",
+    "webRequest",
+    "declarativeNetRequest"
+  ],
+  "version": "0.2.0"
 }

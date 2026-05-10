@@ -537,6 +537,9 @@ function le() {
     [x, N] = o.useState(null),
     [z, P] = o.useState(null),
     [m, Y] = o.useState(null),
+    [isQuickWhitelisted, setIsQuickWhitelisted] = o.useState(!1),
+    [popupWhitelistInput, setPopupWhitelistInput] = o.useState(""),
+    [popupWhitelistItems, setPopupWhitelistItems] = o.useState([]),
     R = o.useCallback((t) => {
       (B(t),
         chrome.storage.sync.set({ settings: t }, () => {
@@ -639,8 +642,210 @@ function le() {
       t != null && t.history && E(t.history);
     });
   }, []);
+
+  o.useEffect(() => {
+    const handleStorageChange = (changes, areaName) => {
+      if (areaName !== "sync") return;
+
+      if (changes.enabled && typeof changes.enabled.newValue === "boolean") {
+        y(changes.enabled.newValue);
+      }
+
+      if (changes.settings && changes.settings.newValue) {
+        const settings = changes.settings.newValue;
+
+        if (typeof settings.enabled === "boolean") {
+          y(settings.enabled);
+        } else if (typeof settings.isEnabled === "boolean") {
+          y(settings.isEnabled);
+        } else if (typeof settings.protectionEnabled === "boolean") {
+          y(settings.protectionEnabled);
+        }
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
+  const normalizeWhitelistDomain = (value) => {
+    return String(value || "")
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0]
+      .toLowerCase();
+  };
+  const isDomainInWhitelist = (domain, whitelist) => {
+    return whitelist.some((item) => {
+      return domain === item || domain.endsWith("." + item);
+    });
+  };
+
+  const addCurrentSiteToWhitelist = () => {
+    const domain = normalizeWhitelistDomain(W);
+
+    if (!domain || domain === "—") return;
+
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      const whitelist = settings.whitelist || [];
+
+      const updatedWhitelist = whitelist.includes(domain)
+        ? whitelist
+        : [...whitelist, domain];
+
+      const updatedSettings = {
+        ...settings,
+        whitelist: updatedWhitelist,
+      };
+
+      chrome.storage.sync.set(
+        {
+          settings: updatedSettings,
+        },
+        () => {
+          setIsQuickWhitelisted(!0);
+          setPopupWhitelistItems(updatedWhitelist);
+          p("safe");
+          U(["Beyaz Listede"]);
+          H(0);
+
+          chrome.runtime.sendMessage({
+            type: "ADD_TO_WHITELIST",
+            domain,
+          });
+
+          chrome.runtime.sendMessage({
+            type: "SETTINGS_UPDATED",
+            settings: updatedSettings,
+          });
+
+          console.log("Beyaz listeye eklendi:", domain);
+        },
+      );
+    });
+  };
+  const getPopupWhitelist = (callback) => {
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      callback(settings.whitelist || []);
+    });
+  };
+
+  const savePopupWhitelist = (whitelist, callback) => {
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      const updatedSettings = {
+        ...settings,
+        whitelist,
+      };
+
+      chrome.storage.sync.set(
+        {
+          settings: updatedSettings,
+        },
+        () => {
+          chrome.runtime.sendMessage({
+            type: "SETTINGS_UPDATED",
+            settings: updatedSettings,
+          });
+
+          if (callback) callback();
+        },
+      );
+    });
+  };
+
+  const refreshPopupWhitelist = () => {
+    getPopupWhitelist((whitelist) => {
+      setPopupWhitelistItems(whitelist);
+    });
+  };
+
+  const addPopupWhitelistItem = () => {
+    const domain = normalizeWhitelistDomain(popupWhitelistInput);
+
+    if (!domain || domain === "—") return;
+
+    getPopupWhitelist((whitelist) => {
+      const updatedWhitelist = whitelist.includes(domain)
+        ? whitelist
+        : [...whitelist, domain];
+
+      savePopupWhitelist(updatedWhitelist, () => {
+        setPopupWhitelistInput("");
+        setPopupWhitelistItems(updatedWhitelist);
+
+        if (domain === currentDomainForWhitelist) {
+          setIsQuickWhitelisted(!0);
+          p("safe");
+          U(["Beyaz Listede"]);
+          H(0);
+        }
+
+        chrome.runtime.sendMessage({
+          type: "ADD_TO_WHITELIST",
+          domain,
+        });
+
+        console.log("Popup beyaz listeye eklendi:", domain);
+      });
+    });
+  };
+
+  const recheckCurrentUrlStatus = () => {
+    if (!r || !u) return;
+
+    chrome.runtime.sendMessage({ type: "CHECK_URL", url: r }, (response) => {
+      if (!response) {
+        p("unknown");
+        U([]);
+        H(0);
+        return;
+      }
+
+      p(response.level.toLowerCase());
+      U(response.reasons || []);
+      H(response.score || 0);
+    });
+  };
   const q = (t) => {
-      (y(t), chrome.runtime.sendMessage({ type: "SET_ENABLED", enabled: t }));
+      y(t);
+
+      chrome.storage.sync.get(["settings"], (result) => {
+        const settings = result.settings || {};
+
+        const updatedSettings = {
+          ...settings,
+          enabled: t,
+          isEnabled: t,
+          active: t,
+          isActive: t,
+          protectionActive: t,
+          protectionEnabled: t,
+        };
+
+        chrome.storage.sync.set(
+          {
+            enabled: t,
+            settings: updatedSettings,
+          },
+          () => {
+            chrome.runtime.sendMessage({
+              type: "SET_ENABLED",
+              enabled: t,
+            });
+
+            chrome.runtime.sendMessage({
+              type: "SETTINGS_UPDATED",
+              settings: updatedSettings,
+            });
+          },
+        );
+      });
     },
     $ = () => {
       chrome.runtime.sendMessage({ type: "GET_HISTORY" }, (t) => {
@@ -656,15 +861,52 @@ function le() {
         E([]);
       });
     },
-    a = c === "loading" ? null : oe[c],
-    Q = c === "loading" ? "" : re[c],
     W = (() => {
       try {
         return new URL(r).hostname;
       } catch {
         return r || "—";
       }
-    })();
+    })(),
+    displayStatus = isQuickWhitelisted ? "safe" : c,
+    a = displayStatus === "loading" ? null : oe[displayStatus],
+    Q = displayStatus === "loading" ? "" : re[displayStatus];
+  const currentDomainForWhitelist = normalizeWhitelistDomain(W);
+
+  const shouldShowQuickWhitelistButton =
+    currentDomainForWhitelist &&
+    currentDomainForWhitelist !== "—" &&
+    !isQuickWhitelisted &&
+    (displayStatus === "dangerous" ||
+      displayStatus === "suspicious" ||
+      displayStatus === "unknown");
+
+  o.useEffect(() => {
+    if (!currentDomainForWhitelist || currentDomainForWhitelist === "—") return;
+
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      const whitelist = settings.whitelist || [];
+      const matchedWhitelist = isDomainInWhitelist(
+        currentDomainForWhitelist,
+        whitelist,
+      );
+
+      setIsQuickWhitelisted(matchedWhitelist);
+
+      if (matchedWhitelist) {
+        p("safe");
+        U(["Beyaz listede"]);
+        H(0);
+      }
+    });
+  }, [currentDomainForWhitelist]);
+  o.useEffect(() => {
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      setPopupWhitelistItems(settings.whitelist || []);
+    });
+  }, []);
   return i && !i.ready
     ? e.jsxs("div", {
         style: {
@@ -1021,6 +1263,144 @@ function le() {
                           }),
                         }),
 
+                        e.jsxs("div", {
+                          style: {
+                            marginBottom: 14,
+                            padding: 12,
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 12,
+                          },
+                          children: [
+                            e.jsxs("div", {
+                              style: {
+                                marginBottom: 8,
+                              },
+                              children: [
+                                e.jsx("div", {
+                                  style: {
+                                    fontWeight: 700,
+                                    fontSize: 13,
+                                    color: "#111827",
+                                  },
+                                  children: "Beyaz Liste",
+                                }),
+                                e.jsx("div", {
+                                  style: {
+                                    fontSize: 11,
+                                    color: "#6b7280",
+                                    marginTop: 2,
+                                  },
+                                  children:
+                                    "Bu listedeki siteler güvenli kabul edilir",
+                                }),
+                              ],
+                            }),
+
+                            e.jsxs("div", {
+                              style: {
+                                display: "flex",
+                                gap: 6,
+                                marginBottom: 8,
+                              },
+                              children: [
+                                e.jsx("input", {
+                                  value: popupWhitelistInput,
+                                  placeholder: "örnek: example.com",
+                                  onChange: (event) =>
+                                    setPopupWhitelistInput(event.target.value),
+                                  onKeyDown: (event) => {
+                                    if (event.key === "Enter") {
+                                      addPopupWhitelistItem();
+                                    }
+                                  },
+                                  style: {
+                                    flex: 1,
+                                    minWidth: 0,
+                                    padding: "8px 9px",
+                                    border: "1px solid #d1d5db",
+                                    borderRadius: 9,
+                                    fontSize: 12,
+                                    outline: "none",
+                                    fontFamily: "inherit",
+                                    color: "#374151",
+                                    background: "white",
+                                  },
+                                }),
+
+                                e.jsx("button", {
+                                  onClick: addPopupWhitelistItem,
+                                  onMouseEnter: (event) => {
+                                    event.currentTarget.style.background =
+                                      "#1d4ed8";
+                                    event.currentTarget.style.transform =
+                                      "translateY(-1px)";
+                                  },
+                                  onMouseLeave: (event) => {
+                                    event.currentTarget.style.background =
+                                      "#2563eb";
+                                    event.currentTarget.style.transform =
+                                      "translateY(0)";
+                                  },
+                                  style: {
+                                    border: "none",
+                                    background: "#2563eb",
+                                    color: "white",
+                                    borderRadius: 9,
+                                    padding: "8px 11px",
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    fontFamily: "inherit",
+                                    transition: "all 0.15s ease",
+                                  },
+                                  children: "Ekle",
+                                }),
+                              ],
+                            }),
+
+                            e.jsx("button", {
+                              onClick: () => {
+                                chrome.tabs.create({
+                                  url: chrome.runtime.getURL("whitelist.html"),
+                                });
+                              },
+
+                              onMouseEnter: (event) => {
+                                event.currentTarget.style.background =
+                                  "#e0e7ff";
+                                event.currentTarget.style.color = "#1e3a8a";
+                                event.currentTarget.style.transform =
+                                  "translateY(-1px)";
+                              },
+
+                              onMouseLeave: (event) => {
+                                event.currentTarget.style.background =
+                                  "#eef2ff";
+                                event.currentTarget.style.color = "#2563eb";
+                                event.currentTarget.style.transform =
+                                  "translateY(0)";
+                              },
+
+                              style: {
+                                width: "100%",
+                                marginTop: 4,
+                                padding: "8px 10px",
+                                border: "1px solid #bfdbfe",
+                                background: "#eef2ff",
+                                color: "#2563eb",
+                                borderRadius: 9,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                                transition: "all 0.15s ease",
+                              },
+
+                              children: "Beyaz listeyi görüntüle",
+                            }),
+                          ],
+                        }),
                         e.jsx("button", {
                           onClick: () => chrome.runtime.openOptionsPage(),
 
@@ -1073,69 +1453,148 @@ function le() {
                           style: {
                             display: "flex",
                             alignItems: "center",
-                            gap: 7,
+                            justifyContent: "space-between",
+                            gap: 10,
                             marginBottom: 8,
+                            width: "100%",
                           },
                           children: [
-                            e.jsx("span", {
-                              style: {
-                                width: 10,
-                                height: 10,
-                                borderRadius: "50%",
-                                display: "inline-block",
-                                background:
-                                  c === "safe"
-                                    ? "#16a34a"
-                                    : c === "dangerous"
-                                      ? "#dc2626"
-                                      : c === "suspicious"
-                                        ? "#d97706"
-                                        : "#6b7280",
-                                marginTop: -15,
-                              },
-                            }),
                             e.jsxs("div", {
-                              title:
-                                c === "safe"
-                                  ? "Bu site güvenli görünüyor"
-                                  : c === "dangerous"
-                                    ? "Bu site riskli olabilir"
-                                    : c === "suspicious"
-                                      ? "Bu site şüpheli davranış gösteriyor"
-                                      : "Bu sitenin durumu belirlenemedi",
                               style: {
                                 display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "center",
+                                alignItems: "center",
+                                gap: 7,
+                                flex: 1,
+                                minWidth: 0,
                               },
                               children: [
-                                e.jsx("div", {
+                                e.jsx("span", {
                                   style: {
-                                    fontWeight: 700,
-                                    fontSize: 16,
-                                    color:
-                                      (a == null ? void 0 : a.color) ||
-                                      "#374151",
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                    background:
+                                      displayStatus === "safe"
+                                        ? "#16a34a"
+                                        : displayStatus === "dangerous"
+                                          ? "#dc2626"
+                                          : displayStatus === "suspicious"
+                                            ? "#d97706"
+                                            : "#6b7280",
+                                    marginTop: -15,
+                                    flexShrink: 0,
                                   },
-                                  children:
-                                    c === "loading"
-                                      ? s.status.checking
-                                      : a == null
-                                        ? void 0
-                                        : a.label,
                                 }),
-                                e.jsx("div", {
+
+                                e.jsxs("div", {
+                                  title:
+                                    displayStatus === "safe"
+                                      ? "Bu site güvenli görünüyor"
+                                      : displayStatus === "dangerous"
+                                        ? "Bu site riskli olabilir"
+                                        : displayStatus === "suspicious"
+                                          ? "Bu site şüpheli davranış gösteriyor"
+                                          : "Bu sitenin durumu belirlenemedi",
                                   style: {
-                                    fontSize: 12,
-                                    color: "#6b7280",
-                                    marginTop: 2,
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    justifyContent: "center",
+                                    minWidth: 0,
                                   },
-                                  children: W,
+                                  children: [
+                                    e.jsx("div", {
+                                      style: {
+                                        fontWeight: 700,
+                                        fontSize: 16,
+                                        color:
+                                          (a == null ? void 0 : a.color) ||
+                                          "#374151",
+                                      },
+                                      children:
+                                        displayStatus === "loading"
+                                          ? s.status.checking
+                                          : a == null
+                                            ? void 0
+                                            : a.label,
+                                    }),
+                                    e.jsx("div", {
+                                      style: {
+                                        fontSize: 12,
+                                        color: "#6b7280",
+                                        marginTop: 2,
+                                      },
+                                      children: W,
+                                    }),
+                                  ],
                                 }),
                               ],
                             }),
+
+                            shouldShowQuickWhitelistButton &&
+                              e.jsx("button", {
+                                onClick: addCurrentSiteToWhitelist,
+
+                                onMouseEnter: (event) => {
+                                  if (isQuickWhitelisted) return;
+
+                                  event.currentTarget.style.background =
+                                    "#dbeafe";
+                                  event.currentTarget.style.borderColor =
+                                    "#60a5fa";
+                                  event.currentTarget.style.transform =
+                                    "translateY(-1px)";
+                                },
+
+                                onMouseLeave: (event) => {
+                                  event.currentTarget.style.background =
+                                    isQuickWhitelisted ? "#dcfce7" : "#eff6ff";
+
+                                  event.currentTarget.style.borderColor =
+                                    isQuickWhitelisted ? "#86efac" : "#bfdbfe";
+
+                                  event.currentTarget.style.transform =
+                                    "translateY(0)";
+                                },
+
+                                disabled: isQuickWhitelisted,
+
+                                title: isQuickWhitelisted
+                                  ? "Bu site zaten beyaz listede"
+                                  : "Bu siteyi beyaz listeye ekle",
+
+                                style: {
+                                  flexShrink: 0,
+                                  marginLeft: 8,
+                                  border: isQuickWhitelisted
+                                    ? "1px solid #86efac"
+                                    : "1px solid #bfdbfe",
+                                  background: isQuickWhitelisted
+                                    ? "#dcfce7"
+                                    : "#eff6ff",
+                                  color: isQuickWhitelisted
+                                    ? "#166534"
+                                    : "#2563eb",
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: "7px 9px",
+                                  borderRadius: 10,
+                                  cursor: isQuickWhitelisted
+                                    ? "default"
+                                    : "pointer",
+                                  whiteSpace: "nowrap",
+                                  fontFamily: "inherit",
+                                  transition: "all 0.15s ease",
+                                  opacity: isQuickWhitelisted ? 0.85 : 1,
+                                },
+
+                                children: isQuickWhitelisted
+                                  ? "Listede"
+                                  : "Beyaz listeye al",
+                              }),
                           ],
                         }),
+
                         k > 0 &&
                           e.jsxs("div", {
                             style: { marginTop: 8 },
@@ -1705,55 +2164,69 @@ function le() {
               borderTop: "1px solid #e5e7eb",
             },
             children: [
-              e.jsx("div", {
-                style: { textAlign: "center", marginBottom: m ? 2 : 0 },
-                children: s.footer,
+              e.jsxs("div", {
+                style: {
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto 1fr",
+                  alignItems: "center",
+                  fontSize: 10,
+                  color: "#9ca3af",
+                },
+                children: [
+                  m
+                    ? e.jsx("button", {
+                        onClick: () => {
+                          chrome.tabs.create({
+                            url: chrome.runtime.getURL("list.html"),
+                          });
+                        },
+                        title: "Liste detaylarını yeni sayfada aç",
+                        onMouseEnter: (event) => {
+                          event.currentTarget.style.background = "#dbeafe";
+                          event.currentTarget.style.color = "#1d4ed8";
+                          event.currentTarget.style.borderColor = "#93c5fd";
+                          event.currentTarget.style.transform =
+                            "translateY(-1px)";
+                          event.currentTarget.style.boxShadow =
+                            "0 3px 8px rgba(37, 99, 235, 0.16)";
+                        },
+                        onMouseLeave: (event) => {
+                          event.currentTarget.style.background = "#eef2ff";
+                          event.currentTarget.style.color = "#2563eb";
+                          event.currentTarget.style.borderColor = "#bfdbfe";
+                          event.currentTarget.style.transform = "translateY(0)";
+                          event.currentTarget.style.boxShadow =
+                            "0 1px 3px rgba(37, 99, 235, 0.08)";
+                        },
+                        style: {
+                          justifySelf: "start",
+                          background: "#eef2ff",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: 999,
+                          padding: "3px 8px",
+                          fontSize: 9,
+                          fontWeight: 600,
+                          color: "#2563eb",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition: "all 0.15s ease",
+                          boxShadow: "0 1px 3px rgba(37, 99, 235, 0.08)",
+                        },
+                        children: ["Liste: ", m.blacklistSize],
+                      })
+                    : e.jsx("span", {}),
+
+                  e.jsx("div", {
+                    style: {
+                      textAlign: "center",
+                      whiteSpace: "nowrap",
+                    },
+                    children: s.footer,
+                  }),
+
+                  e.jsx("span", {}),
+                ],
               }),
-              m &&
-                e.jsxs("div", {
-                  style: {
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 9,
-                    color: "#b0b5bd",
-                  },
-                  children: [
-                    e.jsxs("span", {
-                      children: ["init: ", m.initTimings.total ?? "?", "ms"],
-                    }),
-                    e.jsx("button", {
-                      onClick: () => {
-                        chrome.tabs.create({
-                          url: chrome.runtime.getURL("list.html"),
-                        });
-                      },
-                      title: "Liste detaylarını yeni sayfada aç",
-                      onMouseEnter: (event) => {
-                        event.currentTarget.style.background = "#e0e7ff";
-                        event.currentTarget.style.color = "#1e3a8a";
-                      },
-                      onMouseLeave: (event) => {
-                        event.currentTarget.style.background = "transparent";
-                        event.currentTarget.style.color = "#64748b";
-                      },
-                      style: {
-                        background: "transparent",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: 6,
-                        padding: "2px 6px",
-                        fontSize: 9,
-                        color: "#64748b",
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        transition: "all 0.15s ease",
-                      },
-                      children: ["liste: ", m.blacklistSize],
-                    }),
-                    e.jsxs("span", {
-                      children: ["uptime: ", Math.round(m.uptime / 1e3), "s"],
-                    }),
-                  ],
-                }),
             ],
           }),
         ],
@@ -1806,3 +2279,127 @@ function A({ label: i, value: l, color: r, onClick, title }) {
 }
 const _ = document.getElementById("root");
 _ && V(_).render(e.jsx(o.StrictMode, { children: e.jsx(le, {}) }));
+
+setTimeout(() => {
+  const introScreen = document.getElementById("introScreen");
+  const root = document.getElementById("root");
+  const introActivateBtn = document.getElementById("introActivateBtn");
+
+  if (!introScreen || !root || !introActivateBtn) return;
+
+  let ignoreStateCheckUntil = 0;
+
+  function showIntroScreen() {
+    introScreen.classList.remove("hidden");
+    root.classList.add("hidden");
+  }
+
+  function showMainPopup() {
+    introScreen.classList.add("hidden");
+    root.classList.remove("hidden");
+  }
+
+  function updateIntroVisibility() {
+    if (Date.now() < ignoreStateCheckUntil) return;
+
+    chrome.storage.sync.get(["enabled", "settings"], (result) => {
+      if (Date.now() < ignoreStateCheckUntil) return;
+
+      const settings = result.settings || {};
+
+      const isEnabled =
+        typeof result.enabled === "boolean"
+          ? result.enabled
+          : typeof settings.enabled === "boolean"
+            ? settings.enabled
+            : typeof settings.isEnabled === "boolean"
+              ? settings.isEnabled
+              : true;
+
+      if (isEnabled) {
+        showMainPopup();
+      } else {
+        showIntroScreen();
+      }
+    });
+  }
+
+  updateIntroVisibility();
+
+  introActivateBtn.addEventListener("click", () => {
+    ignoreStateCheckUntil = Date.now() + 2500;
+
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+
+      const updatedSettings = {
+        ...settings,
+        enabled: true,
+        isEnabled: true,
+        active: true,
+        isActive: true,
+        protectionActive: true,
+        protectionEnabled: true,
+      };
+
+      chrome.storage.sync.set(
+        {
+          enabled: true,
+          settings: updatedSettings,
+        },
+        () => {
+          chrome.runtime.sendMessage({
+            type: "SET_ENABLED",
+            enabled: true,
+          });
+
+          chrome.runtime.sendMessage({
+            type: "SETTINGS_UPDATED",
+            settings: updatedSettings,
+          });
+
+          setTimeout(() => {
+            showMainPopup();
+          }, 150);
+        },
+      );
+    });
+  });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "sync") return;
+
+    let newEnabledValue = null;
+
+    if (changes.enabled && typeof changes.enabled.newValue === "boolean") {
+      newEnabledValue = changes.enabled.newValue;
+    }
+
+    if (changes.settings && changes.settings.newValue) {
+      const settings = changes.settings.newValue;
+
+      if (typeof settings.enabled === "boolean") {
+        newEnabledValue = settings.enabled;
+      } else if (typeof settings.isEnabled === "boolean") {
+        newEnabledValue = settings.isEnabled;
+      } else if (typeof settings.protectionEnabled === "boolean") {
+        newEnabledValue = settings.protectionEnabled;
+      }
+    }
+
+    if (newEnabledValue === false) {
+      ignoreStateCheckUntil = 0;
+      showIntroScreen();
+      return;
+    }
+
+    if (newEnabledValue === true) {
+      showMainPopup();
+      return;
+    }
+
+    if (changes.enabled || changes.settings) {
+      updateIntroVisibility();
+    }
+  });
+}, 100);

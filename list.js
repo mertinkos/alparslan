@@ -12,8 +12,7 @@ function renderList(items) {
     return;
   }
 
-  listDiv.innerHTML = items
-    .slice(0, 5000)
+  listDiv.innerHTML = visibleItems
     .map((item) => {
       let url = item;
 
@@ -41,12 +40,18 @@ chrome.runtime.sendMessage({ type: "GET_BLACKLIST_ITEMS" }, (res) => {
   renderList(allItems);
 });
 
+let searchTimeout;
+
 searchInput.addEventListener("input", () => {
-  const query = searchInput.value.toLowerCase().trim();
+  clearTimeout(searchTimeout);
 
-  const filtered = allItems.filter((item) =>
-    String(item).toLowerCase().includes(query),
-  );
+  searchTimeout = setTimeout(() => {
+    const query = searchInput.value.toLowerCase().trim();
 
-  renderList(filtered);
+    const filtered = allItems.filter((item) =>
+      String(item).toLowerCase().includes(query),
+    );
+
+    renderList(filtered);
+  }, 200);
 });

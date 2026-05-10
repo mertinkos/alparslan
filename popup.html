@@ -1,17 +1,178 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Alparslan</title>
     <style>
-      body { margin: 0; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 340px;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #f8fafc;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      .hidden {
+        display: none !important;
+      }
+      #root {
+        width: 340px;
+      }
+      .intro-card {
+        width: 100%;
+        min-height: 285px;
+        border-radius: 20px;
+        background: #ffffff;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+        border: 1px solid rgba(226, 232, 240, 0.95);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 24px 18px;
+        box-sizing: border-box;
+      }
+
+      .intro-title {
+        font-size: 16px;
+        line-height: 1.35;
+        font-weight: 700;
+        color: #172554;
+        text-align: center;
+        max-width: 280px;
+      }
+      .intro-subtitle {
+        font-size: 12px;
+        color: #64748b;
+        text-align: center;
+        margin-top: -8px;
+        max-width: 250px;
+      }
+
+      .intro-activate-btn {
+        border: none;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        font-family: inherit;
+      }
+
+      .intro-logo {
+        width: 82px;
+        height: 82px;
+        object-fit: contain;
+        filter: drop-shadow(0 6px 10px rgba(15, 23, 42, 0.14));
+      }
+      .intro-switch {
+        width: 190px;
+        height: 68px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #16a34a, #22c55e);
+        position: relative;
+        box-shadow:
+          inset 0 0 0 4px #ffffff,
+          0 10px 24px rgba(34, 197, 94, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 8px;
+        box-sizing: border-box;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          filter 0.18s ease;
+      }
+
+      .intro-switch-circle {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #ffffff;
+        color: #15803d;
+        font-size: 16px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+        letter-spacing: 0.5px;
+      }
+
+      .intro-activate-btn:hover .intro-switch {
+        transform: translateY(-1px) scale(1.02);
+        box-shadow:
+          inset 0 0 0 4px #ffffff,
+          0 14px 28px rgba(34, 197, 94, 0.32);
+        filter: brightness(1.03);
+      }
+
+      .intro-activate-btn:active .intro-switch {
+        transform: scale(0.98);
+      }
+      .intro-screen {
+        width: 340px;
+        min-height: 470px;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 0;
+        background:
+          radial-gradient(
+            circle at top,
+            rgba(34, 197, 94, 0.1),
+            transparent 42%
+          ),
+          linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      }
+      .intro-button-hint {
+        font-size: 12px;
+        color: #64748b;
+        text-align: center;
+        margin-top: -6px;
+      }
     </style>
     <script type="module" crossorigin src="/popup.js"></script>
-    <link rel="modulepreload" crossorigin href="/chunks/client.CTQ0Ju4c.js">
-    <link rel="modulepreload" crossorigin href="/chunks/tr.sOGZA2rk.js">
+    <link rel="modulepreload" crossorigin href="/chunks/client.CTQ0Ju4c.js" />
+    <link rel="modulepreload" crossorigin href="/chunks/tr.sOGZA2rk.js" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="introScreen" class="intro-screen hidden">
+      <div class="intro-card">
+        <div class="intro-title">
+          Tarayıcınızı korumaya başlamak için butona dokunun
+        </div>
+
+        <button id="introActivateBtn" class="intro-activate-btn">
+          <img
+            src="/icons/alparslan_logo.svg"
+            alt="Alparslan Logo"
+            class="intro-logo"
+          />
+
+          <div class="intro-switch">
+            <div class="intro-switch-circle">Aç</div>
+          </div>
+        </button>
+        <div class="intro-button-hint">Koruma sistemini başlat</div>
+      </div>
+    </div>
+
+    <div id="root" class="hidden"></div>
   </body>
 </html>
