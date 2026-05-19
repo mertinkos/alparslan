@@ -2,8 +2,8 @@
   "use strict";
   const l = {
     appName: "Alparslan",
-    version: "v0.1.0",
-    footer: "Alparslan v0.1.0",
+    version: `v${chrome.runtime.getManifest().version}`,
+    footer: `Alparslan v${chrome.runtime.getManifest().version}`,
     close: "Kapat",
     add: "Ekle",
     send: "Gönder",
