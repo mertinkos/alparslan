@@ -12,7 +12,7 @@ function renderList(items) {
     return;
   }
 
-  listDiv.innerHTML = visibleItems
+  listDiv.innerHTML = items
     .map((item) => {
       let url = item;
 
