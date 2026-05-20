@@ -16,3 +16,12 @@ test-results
 docs
 .idea
 .wolf/
+
+# Build artifacts must live in dist/, never in repo root
+/list.js
+/whitelist.js
+/background.js
+/content.js
+/popup.js
+/options.js
+/chunks/

@@ -158,7 +158,10 @@ export default function Options() {
         </div>
       )}
 
-      {/* Protection Level */}
+      {/* Protection Level — temporarily hidden per team decision; will be
+          revisited together. Keeping the JSX + handler so the toggle is a
+          single uncomment when we're ready. */}
+      {/*
       <Section title={t.options.protectionLevel}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {(Object.keys(PROTECTION_LABELS) as ProtectionLevel[]).map((level) => (
@@ -192,17 +195,30 @@ export default function Options() {
           ))}
         </div>
       </Section>
+      */}
 
       {/* Notifications */}
       <Section title={t.options.notifications}>
         <label
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#f8fafc";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "white";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.04)";
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "10px 12px",
             background: "white",
-            borderRadius: 8,
+            borderRadius: 12,
+            transition: "all 0.18s ease",
+            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
             border: "1px solid #e5e7eb",
             cursor: "pointer",
           }}
@@ -246,13 +262,25 @@ export default function Options() {
       {/* Network Monitoring */}
       <Section title={t.options.networkMonitoring}>
         <label
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#f8fafc";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "white";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.04)";
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "10px 12px",
             background: "white",
-            borderRadius: 8,
+            borderRadius: 12,
+            transition: "all 0.18s ease",
+            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
             border: "1px solid #e5e7eb",
             cursor: "pointer",
             marginBottom: 8,
@@ -308,6 +336,27 @@ export default function Options() {
             onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
             placeholder={t.options.whitelistPlaceholder}
+            onMouseEnter={(e) => {
+              if (document.activeElement !== e.currentTarget) {
+                e.currentTarget.style.borderColor = "#93c5fd";
+                e.currentTarget.style.background = "#f8fafc";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (document.activeElement !== e.currentTarget) {
+                e.currentTarget.style.borderColor = "#d1d5db";
+                e.currentTarget.style.background = "white";
+              }
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "#3b82f6";
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.12)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "#d1d5db";
+              e.currentTarget.style.boxShadow = "none";
+            }}
             style={{
               flex: 1,
               padding: "8px 12px",
@@ -315,10 +364,22 @@ export default function Options() {
               borderRadius: 6,
               fontSize: 13,
               outline: "none",
+              background: "white",
+              transition: "all 0.15s ease",
             }}
           />
           <button
             onClick={handleAddDomain}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#1d4ed8";
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = "0 4px 10px rgba(37, 99, 235, 0.25)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#3b82f6";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
             style={{
               padding: "8px 16px",
               background: "#3b82f6",
@@ -328,6 +389,7 @@ export default function Options() {
               cursor: "pointer",
               fontSize: 13,
               fontFamily: "inherit",
+              transition: "all 0.15s ease",
             }}
           >
             {t.add}
@@ -377,6 +439,18 @@ export default function Options() {
       <Section title={t.options.dataManagement}>
         <button
           onClick={handleClearData}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#fee2e2";
+            e.currentTarget.style.borderColor = "#fca5a5";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 4px 10px rgba(220, 38, 38, 0.15)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "#fef2f2";
+            e.currentTarget.style.borderColor = "#fecaca";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
           style={{
             padding: "10px 20px",
             background: "#fef2f2",
@@ -387,6 +461,7 @@ export default function Options() {
             fontSize: 13,
             fontFamily: "inherit",
             fontWeight: 600,
+            transition: "all 0.15s ease",
           }}
         >
           {t.options.clearAll}

@@ -5,35 +5,49 @@ interface TabBarProps {
   onTabChange: (tab: TabId) => void;
 }
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "status", label: "Durum" },
-  { id: "dashboard", label: "Skor" },
-  { id: "settings", label: "Ayarlar" },
+const TABS: { id: TabId; label: string; title: string }[] = [
+  { id: "status", label: "Durum", title: "Sayfanın güvenlik durumunu göster" },
+  { id: "dashboard", label: "Skor", title: "Haftalık güvenlik skorunu göster" },
+  { id: "settings", label: "Ayarlar", title: "Eklenti ayarlarını göster" },
 ];
 
 export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
   return (
     <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb", background: "white" }}>
-      {TABS.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          style={{
-            flex: 1,
-            padding: "8px 0",
-            background: "transparent",
-            border: "none",
-            borderBottom: activeTab === tab.id ? "2px solid #3b82f6" : "2px solid transparent",
-            color: activeTab === tab.id ? "#3b82f6" : "#6b7280",
-            fontWeight: activeTab === tab.id ? 600 : 400,
-            fontSize: 13,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          {tab.label}
-        </button>
-      ))}
+      {TABS.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            title={tab.title}
+            onMouseEnter={(e) => {
+              if (!isActive) e.currentTarget.style.background = "#e2e8f0";
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) e.currentTarget.style.background = "transparent";
+            }}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              background: isActive ? "#f8fafc" : "transparent",
+              boxShadow: isActive ? "0 2px 6px rgba(0,0,0,0.08)" : "none",
+              border: "none",
+              borderBottom: isActive ? "2px solid #3b82f6" : "2px solid transparent",
+              color: isActive ? "#3b82f6" : "#6b7280",
+              fontWeight: isActive ? 600 : 400,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              borderRadius: 8,
+              margin: 4,
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

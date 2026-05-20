@@ -66,6 +66,9 @@ const tr = {
     blockedTracker: "Engellenen Tracker",
     https: "HTTPS",
     activity: "Aktivite",
+    levelSafe: "Güvenli seviye",
+    levelMedium: "Orta risk seviyesi",
+    levelRisky: "Riskli seviye",
   },
 
   // --- Dashboard ipuclari ---
@@ -110,6 +113,97 @@ const tr = {
     show: "Tarama geçmişi",
     empty: "Henüz tarama yok",
     clear: "Geçmişi temizle",
+    showAlt: "Tarama geçmişini görüntüle",
+    hideAlt: "Geçmiş listesini gizle",
+  },
+
+  // --- Popup filtre listeleri ---
+  filterLists: {
+    controlList: "Kontrol Listesi",
+    threatList: "Tehdit Listesi",
+    trackerList: "Tracker Listesi",
+    unknownList: "Bilinmeyen Listesi",
+    threatEmpty: "Tehdit bulunamadı",
+    trackerEmpty: "Tracker bulunamadı",
+    unknownEmpty: "Bilinmeyen kayıt bulunamadı",
+    unknownLabel: "Bilinmeyen",
+    tooltipControl: "Kontrol edilen bağlantıların toplam sayısı",
+    tooltipThreat: "Tespit edilen tehlikeli bağlantı sayısı",
+    tooltipTracker: "Tespit edilen tracker sayısı",
+    tooltipUnknown: "Durumu belirlenemeyen bağlantı sayısı",
+  },
+
+  // --- Popup beyaz liste hizli ekleme ---
+  popupWhitelist: {
+    addButton: "Beyaz listeye al",
+    alreadyAdded: "Beyaz Listede",
+    viewAll: "Beyaz listeyi görüntüle",
+    tooltipAdd: "Bu siteyi beyaz listeye ekle",
+    tooltipAlready: "Bu site zaten beyaz listede",
+  },
+
+  // --- Popup durum cumleleri (status indicator tooltip) ---
+  statusMessages: {
+    safe: "Bu site güvenli görünüyor",
+    dangerous: "Bu site riskli olabilir",
+    suspicious: "Bu site şüpheli davranış gösteriyor",
+    unknown: "Bu sitenin durumu belirlenemedi",
+    disabled: "Koruma kapalı",
+  },
+
+  // --- Popup detay paneli ---
+  detailPanel: {
+    show: "Detaylı görüntüle",
+    hide: "Detayı gizle",
+    loading: "Detaylar yükleniyor...",
+    close: "Detay panelini kapat",
+  },
+
+  // --- Popup koruma toggle tooltip ---
+  protectionToggle: {
+    disable: "Korumayı kapatmak için tıklayınız",
+    enable: "Korumayı etkinleştirmek için tıklayınız",
+  },
+
+  // --- Popup bilgilendirme merkezi ---
+  notificationCenter: {
+    open: "Bildirimleri görüntüle",
+    close: "Bildirimleri kapat",
+    infoButton: "Bilgilendirme Merkezi",
+    infoButtonHide: "Bilgilendirmeyi gizle",
+    infoTitle: "Kısa Bilgilendirme",
+    welcome: "Ben Alparslan sizi korumak için buradayım! ",
+    welcomeLink: "Buraya",
+    welcomeLinkTitle: "Dijital Savunma sitesine git",
+    welcomeSuffix: " tıklayarak benimle ilgili bilgilere ulaşabilirsiniz.",
+    todayPrefix: "Bugün sizin için ",
+    todayChecked: " kontrol yaptım.",
+    todayThreats: " tehdit buldum.",
+    todayTrackers: " tracker buldum.",
+    todayUnknowns: " bilinmeyen kayıt tespit ettim.",
+    protectedDays: (n: number) => `${n} gündür korunuyorsunuz`,
+    glossary: {
+      controlLabel: "Kontrol",
+      controlDesc: "Eklentinin ziyaret ettiğiniz sayfadaki bağlantıları, istekleri ve alan adlarını güvenlik açısından incelemesini ifade eder.",
+      scoreLabel: "Skor",
+      scoreDesc1: "Haftalık güvenlik skorunu gösterir. ",
+      scoreDesc2: " güvenli, ",
+      scoreDesc3: " orta seviye, ",
+      scoreDesc4: " riskli seviye olarak değerlendirilir.",
+      scoreRangeGood: "80 – 100",
+      scoreRangeMedium: "50 – 79",
+      scoreRangeBad: "0 – 49",
+      whitelistLabel: "Beyaz Liste",
+      whitelistDesc: "Güvenilir olduğunu bildiğiniz siteleri eklediğiniz alandır. Bu siteler güvenli kabul edilir. Beyaz listeye ayarlar kısmından ulaşabilirsiniz.",
+      blacklistLabel: "Kara Liste",
+      blacklistDesc: "Riskli veya engellenmesini istediğiniz sitelerin tutulduğu listedir.",
+      threatLabel: "Tehdit",
+      threatDesc: "Zararlı, şüpheli veya kullanıcı güvenliğini riske atabilecek bağlantıları ifade eder.",
+      trackerLabel: "Tracker",
+      trackerDesc: "Sitelerdeki takip mekanizmalarıdır. Kullanıcı davranışlarını izleyebilir.",
+      unknownLabel: "Bilinmeyen",
+      unknownDesc: "Sistemin kesin olarak güvenli veya riskli sınıflandıramadığı bağlantıları gösterir. İsterseniz bilinmeyen siteleri ayarlar kısmından beyaz listeye ekleyebilirsiniz.",
+    },
   },
 
   // --- Popup raporlama ---

@@ -1,10 +1,10 @@
 {
-   "extensionDescription": {
-      "description": "Extension description",
-      "message": "Oltalama ve dolandırıcılığa karşı güvenli tarayıcı eklentisi"
-   },
-   "extensionName": {
-      "description": "Extension name",
-      "message": "Alparslan"
-   }
+  "extensionDescription": {
+    "description": "Extension description",
+    "message": "Oltalama ve dolandırıcılığa karşı güvenli tarayıcı eklentisi"
+  },
+  "extensionName": {
+    "description": "Extension name",
+    "message": "Alparslan"
+  }
 }
