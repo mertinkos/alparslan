@@ -35,6 +35,16 @@ function copyExtensionFiles(platform: Platform) {
       copyDir(resolve(__dirname, "lists"), resolve(dist, "lists"));
       copyDir(resolve(__dirname, "public/_locales"), resolve(dist, "_locales"));
       copyDir(resolve(__dirname, "icons"), resolve(dist, "icons"));
+
+      // Standalone whitelist + blocklist pages — plain HTML+JS, not built by
+      // Vite. Copy them verbatim so the popup's "Beyaz listeyi görüntüle"
+      // button can open them via chrome.runtime.getURL().
+      for (const f of ["whitelist.html", "whitelist.js", "list.html", "list.js"]) {
+        const src = resolve(__dirname, f);
+        if (existsSync(src)) {
+          copyFileSync(src, resolve(dist, f));
+        }
+      }
     },
   };
 }
