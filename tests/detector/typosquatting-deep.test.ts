@@ -353,6 +353,67 @@ describe("Separator stripping — hyphens and dots", () => {
   });
 });
 
+// ─── ASCII DIGIT/LETTER CONFUSABLES (ISSUE #27) ──────────────────
+describe("ASCII digit/letter confusables — issue #27", () => {
+  it("catches s0k.com as sok.com.tr typosquat (digit 0 for letter o)", () => {
+    const result = checkTyposquatting("s0k.com");
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe("sok.com.tr");
+    expect(result.reason).toBe("homoglyph");
+  });
+
+  it("catches b1m.com as bim.com.tr typosquat (digit 1 for letter i)", () => {
+    const result = checkTyposquatting("b1m.com");
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe("bim.com.tr");
+    expect(result.reason).toBe("homoglyph");
+  });
+
+  it("catches n1l.com as n11.com typosquat (letter l for digit 1)", () => {
+    const result = checkTyposquatting("n1l.com");
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe("n11.com");
+    expect(result.reason).toBe("homoglyph");
+  });
+
+  it("catches g00gle.com as google.com typosquat (digit 0 for letter o, twice)", () => {
+    const result = checkTyposquatting("g00gle.com");
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe("google.com");
+    expect(result.reason).toBe("homoglyph");
+  });
+
+  it("catches a1o1.com.tr as a101.com.tr typosquat (letter o for digit 0)", () => {
+    const result = checkTyposquatting("a1o1.com.tr");
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe("a101.com.tr");
+    expect(result.reason).toBe("homoglyph");
+  });
+
+  it("scores digit confusable as 100 → DANGEROUS via checkUrl", () => {
+    const result = checkUrl("https://s0k.com", "medium");
+    expect(result.score).toBe(100);
+    expect(result.level).toBe(ThreatLevel.DANGEROUS);
+  });
+
+  // FP regression — legitimate numeric brands must stay SAFE
+  it("does NOT flag n11.com (legitimate numeric brand)", () => {
+    expect(checkTyposquatting("n11.com").isSuspicious).toBe(false);
+  });
+
+  it("does NOT flag a101.com.tr (legitimate numeric brand)", () => {
+    expect(checkTyposquatting("a101.com.tr").isSuspicious).toBe(false);
+  });
+
+  it("does NOT flag bim.com.tr (trusted domain itself)", () => {
+    expect(checkTyposquatting("bim.com.tr").isSuspicious).toBe(false);
+  });
+
+  it("does NOT flag sok.com.tr (trusted domain itself)", () => {
+    expect(checkTyposquatting("sok.com.tr").isSuspicious).toBe(false);
+  });
+});
+
 // ─── ORIGINAL TESTS STILL PASS ───────────────────────────────────
 describe("Original detection still works (no regressions)", () => {
   it("catches isbenk.com.tr (1 edit from isbank)", () => {
