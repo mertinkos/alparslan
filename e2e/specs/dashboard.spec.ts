@@ -39,9 +39,9 @@ test.describe("Dashboard Score — Happy Path", () => {
 
     const popup = await openPopup(context, extensionId);
     await popup.getByText("Skor").click();
-    await popup.waitForTimeout(500);
 
-    const scoreElement = popup.locator('[style*="font-size: 28px"]');
+    const scoreElement = popup.getByTestId("dashboard-score");
+    await expect(scoreElement).toBeVisible({ timeout: 10000 });
     const scoreText = await scoreElement.textContent();
     const score = parseInt(scoreText || "0", 10);
     expect(score).toBeGreaterThan(0);
@@ -65,8 +65,8 @@ test.describe("Dashboard Score — Negative Scenarios", () => {
 
     const popup = await openPopup(context, extensionId);
     await popup.getByText("Skor").click();
-    await popup.waitForTimeout(500);
-    const scoreElement = popup.locator('[style*="font-size: 28px"]');
+    const scoreElement = popup.getByTestId("dashboard-score");
+    await expect(scoreElement).toBeVisible({ timeout: 10000 });
     const scoreText = await scoreElement.textContent();
     const score = parseInt(scoreText || "0", 10);
     expect(score).toBeLessThanOrEqual(100);

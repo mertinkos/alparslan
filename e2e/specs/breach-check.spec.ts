@@ -62,7 +62,10 @@ test.describe("Breach Check — Negative Scenarios", () => {
     await page.waitForTimeout(500);
 
     const popup = await openPopup(context, extensionId);
-    await expect(popup.getByText("Alparslan").first()).toBeVisible();
+    // Scope to #root: the onboarding overlay (#introScreen, outside the React
+    // tree) also contains an "Alparslan ..." title, so an unscoped
+    // getByText(...).first() can resolve to that hidden node.
+    await expect(popup.locator("#root").getByText("Alparslan").first()).toBeVisible();
     await popup.close();
     await page.close();
   });
