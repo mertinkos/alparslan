@@ -158,10 +158,7 @@ export default function Options() {
         </div>
       )}
 
-      {/* Protection Level — temporarily hidden per team decision; will be
-          revisited together. Keeping the JSX + handler so the toggle is a
-          single uncomment when we're ready. */}
-      {/*
+      {/* Protection Level */}
       <Section title={t.options.protectionLevel}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {(Object.keys(PROTECTION_LABELS) as ProtectionLevel[]).map((level) => (
@@ -195,7 +192,6 @@ export default function Options() {
           ))}
         </div>
       </Section>
-      */}
 
       {/* Notifications */}
       <Section title={t.options.notifications}>

@@ -17,9 +17,9 @@ docs
 .idea
 .wolf/
 
-# Build artifacts must live in dist/, never in repo root
-/list.js
-/whitelist.js
+# Bundled build output must live in dist/, never in repo root.
+# (list.js / whitelist.js are hand-written source pages copied verbatim
+#  into dist/ by vite.config.ts, so they are intentionally NOT ignored.)
 /background.js
 /content.js
 /popup.js

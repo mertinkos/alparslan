@@ -90,7 +90,7 @@ export default function DashboardTab() {
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
           {t.dashboard.weeklyScore}
         </div>
-        <div style={{ fontSize: 40, fontWeight: 800, color: scoreColor }}>
+        <div data-testid="dashboard-score" style={{ fontSize: 40, fontWeight: 800, color: scoreColor }}>
           {dashboard.score}
         </div>
         <div style={{ fontSize: 12, color: getScoreLevelColor(dashboard.score), fontWeight: 600, marginTop: 4 }}>

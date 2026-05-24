@@ -4,13 +4,18 @@ const whitelistList = document.getElementById("whitelistList");
 const backBtn = document.getElementById("backBtn");
 const searchInput = document.getElementById("searchInput");
 
+// Keep this in sync with normalizeQuickWhitelistDomain in
+// src/popup/whitelist-helpers.ts (the unit-tested source of truth).
+// Lowercase FIRST so the protocol / www stripping below also catches
+// mixed-case input like "HTTPS://WWW.EXAMPLE.COM/"; lowercasing last
+// silently leaked "www." into whitelist entries for uppercase pastes.
 function normalizeDomain(value) {
   return String(value || "")
     .trim()
+    .toLowerCase()
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
-    .split("/")[0]
-    .toLowerCase();
+    .split("/")[0];
 }
 
 function getSettings(callback) {
