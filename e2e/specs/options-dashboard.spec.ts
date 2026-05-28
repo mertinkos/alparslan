@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures/extension";
 import { openOptionsPage, navigateToSite } from "../helpers/extension-page";
+import { routeExampleCom } from "../helpers/site-routes";
 
 test.describe("Options Page — Happy Path", () => {
   test("should render options page header", async ({ context, extensionId }) => {
@@ -27,7 +28,9 @@ test.describe("Options Page — Happy Path", () => {
   test("should allow adding to whitelist", async ({ context, extensionId }) => {
     const options = await openOptionsPage(context, extensionId);
     // Wait for the page to fully render
-    await expect(options.getByRole("heading", { name: "Beyaz Liste" })).toBeVisible({ timeout: 5000 });
+    await expect(options.getByRole("heading", { name: "Beyaz Liste" })).toBeVisible({
+      timeout: 5000,
+    });
     const input = options.getByPlaceholder("örnek: example.com");
     await expect(input).toBeVisible();
     await input.fill("test-safe-site.com");
@@ -37,6 +40,7 @@ test.describe("Options Page — Happy Path", () => {
   });
 
   test("should show security summary after browsing", async ({ context, extensionId }) => {
+    await routeExampleCom(context);
     const page = await navigateToSite(context, "https://example.com");
     await page.waitForTimeout(1000);
     await page.close();
@@ -52,7 +56,9 @@ test.describe("Options Page — Negative Scenarios", () => {
   test("negative: should not add empty domain to whitelist", async ({ context, extensionId }) => {
     const options = await openOptionsPage(context, extensionId);
     // Wait for the page to fully render
-    await expect(options.getByRole("heading", { name: "Beyaz Liste" })).toBeVisible({ timeout: 5000 });
+    await expect(options.getByRole("heading", { name: "Beyaz Liste" })).toBeVisible({
+      timeout: 5000,
+    });
     // Verify whitelist is empty initially
     await expect(options.getByText("Beyaz liste boş")).toBeVisible();
     // Click Ekle with empty input
