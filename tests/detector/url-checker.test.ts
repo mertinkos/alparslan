@@ -46,6 +46,11 @@ describe("extractRootDomain", () => {
   it("should handle .gov.tr domains", () => {
     expect(extractRootDomain("www.turkiye.gov.tr")).toBe("turkiye.gov.tr");
   });
+
+  it("should handle private suffix domains", () => {
+    expect(extractRootDomain("foo.github.io")).toBe("foo.github.io");
+    expect(extractRootDomain("bar.foo.github.io")).toBe("foo.github.io");
+  });
 });
 
 describe("levenshteinDistance", () => {
@@ -82,6 +87,13 @@ describe("checkTyposquatting", () => {
   it("should not flag completely different domains", () => {
     const result = checkTyposquatting("randomsite.com");
     expect(result.isSuspicious).toBe(false);
+  });
+
+  it("should detect trusted-name hiding across canonical subdomain boundaries", () => {
+    const result = checkTyposquatting("garanti.evil.com");
+
+    expect(result.isSuspicious).toBe(true);
+    expect(result.reason).toBe("subdomain-impersonation");
   });
 });
 
