@@ -72,6 +72,13 @@ describe("isWhitelisted", () => {
     expect(isWhitelisted("EXAMPLE.COM")).toBe(true);
   });
 
+  it("normalizes URL-shaped whitelist entries before matching", async () => {
+    await addToWhitelist("https://www.example.com:8443/login?token=abc");
+
+    expect(isWhitelisted("www.example.com")).toBe(true);
+    expect(getWhitelistDomains()).toContain("www.example.com");
+  });
+
   it("matches subdomains under private-suffix registrable domains only", async () => {
     await addToWhitelist("foo.github.io");
 
@@ -79,12 +86,15 @@ describe("isWhitelisted", () => {
     expect(isWhitelisted("evil.github.io")).toBe(false);
   });
 
-  it("ignores public suffix whitelist entries", async () => {
-    await addToWhitelist("github.io");
+  it.each(["github.io", "pages.dev", "blogspot.com", "com.tr", "co.uk"])(
+    "ignores public suffix whitelist entry %s",
+    async (domain) => {
+      await addToWhitelist(domain);
 
-    expect(isWhitelisted("evil.github.io")).toBe(false);
-    expect(getWhitelistDomains()).not.toContain("github.io");
-  });
+      expect(isWhitelisted(`evil.${domain}`)).toBe(false);
+      expect(getWhitelistDomains()).not.toContain(domain);
+    },
+  );
 });
 
 describe("isBlacklisted", () => {
@@ -103,6 +113,29 @@ describe("isBlacklisted", () => {
 
   it("returns false for unrelated domain", () => {
     expect(isBlacklisted("safe.com")).toBe(false);
+  });
+
+  it("normalizes URL-shaped blacklist entries before matching", async () => {
+    await addToBlacklist([
+      {
+        domain: "https://login.phish.com:8443/account?token=abc",
+        category: "other",
+        addedAt: "2026-01-01",
+        source: "manual",
+      },
+    ]);
+
+    expect(isBlacklisted("login.phish.com")).toBe(true);
+    expect(isBlacklisted("safe.com")).toBe(false);
+  });
+
+  it("does not overmatch sibling private-suffix tenants", async () => {
+    await addToBlacklist([
+      { domain: "foo.github.io", category: "other", addedAt: "2026-01-01", source: "manual" },
+    ]);
+
+    expect(isBlacklisted("bar.foo.github.io")).toBe(true);
+    expect(isBlacklisted("evil.github.io")).toBe(false);
   });
 });
 

@@ -51,6 +51,10 @@ describe("extractRootDomain", () => {
     expect(extractRootDomain("foo.github.io")).toBe("foo.github.io");
     expect(extractRootDomain("bar.foo.github.io")).toBe("foo.github.io");
   });
+
+  it("should keep brand-looking labels outside the registrable domain", () => {
+    expect(extractRootDomain("akbank.com.tr.evil.com")).toBe("evil.com");
+  });
 });
 
 describe("levenshteinDistance", () => {
@@ -94,6 +98,24 @@ describe("checkTyposquatting", () => {
 
     expect(result.isSuspicious).toBe(true);
     expect(result.reason).toBe("subdomain-impersonation");
+  });
+
+  it.each([
+    ["akbank.com.tr.evil.com", "isbank.com.tr", "subdomain-typosquat"],
+    ["login-akbank.com", "akbank.com.tr", "contains-trusted-name"],
+    ["akbank-secure.com", "akbank.com.tr", "contains-trusted-name"],
+  ])("detects canonicalization regression corpus sample %s", (domain, similarTo, reason) => {
+    const result = checkTyposquatting(domain);
+
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe(similarTo);
+    expect(result.reason).toBe(reason);
+  });
+
+  it("does not let sibling private-suffix tenants inherit each other's trust", () => {
+    const result = checkTyposquatting("evil.github.io");
+
+    expect(result.isSuspicious).toBe(false);
   });
 });
 
@@ -147,6 +169,17 @@ describe("checkUrl", () => {
   it("should flag suspicious keywords in domain", () => {
     const result = checkUrl("https://secure-login-verify.xyz");
     expect(result.reasons.some((r) => r.includes("anahtar kelime"))).toBe(true);
+  });
+
+  it.each([
+    ["https://akbank.com.tr.evil.com/login", ThreatLevel.SUSPICIOUS, 55],
+    ["https://login-akbank.com/", ThreatLevel.DANGEROUS, 70],
+    ["https://akbank-secure.com/", ThreatLevel.DANGEROUS, 70],
+  ])("should flag regression corpus phishing URL %s", (url, level, score) => {
+    const result = checkUrl(url);
+
+    expect(result.level).toBe(level);
+    expect(result.score).toBeGreaterThanOrEqual(score);
   });
 
   it("should include timestamp in result", () => {

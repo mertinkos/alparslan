@@ -66,6 +66,20 @@ describe("canonicalizeUrl", () => {
     expect(result.isPrivateIp).toBe(true);
   });
 
+  it.each([
+    ["http://127.0.0.1/", "127.0.0.1"],
+    ["http://10.0.0.5/", "10.0.0.5"],
+    ["http://172.16.0.1/", "172.16.0.1"],
+    ["http://169.254.10.20/", "169.254.10.20"],
+  ])("detects private or local IPv4 ranges for %s", (url, hostname) => {
+    const result = canonicalizeUrl(url);
+
+    expect(result.hostname).toBe(hostname);
+    expect(result.isIpAddress).toBe(true);
+    expect(result.isPrivateIp).toBe(true);
+    expect(result.registrableDomain).toBeNull();
+  });
+
   it("does not treat invalid IPv4-like hostnames as IP addresses", () => {
     const result = canonicalizeUrl("http://999.999.999.999/path");
 
@@ -89,6 +103,18 @@ describe("canonicalizeUrl", () => {
     expect(result.parseError).toBeDefined();
   });
 
+  it.each([
+    ["not-a-url"],
+    ["http://"],
+    ["https://exa mple.com"],
+  ])("keeps invalid URL examples in the parseError path for %s", (url) => {
+    const result = canonicalizeUrl(url);
+
+    expect(result.normalizedUrl).toBeNull();
+    expect(result.hostname).toBeNull();
+    expect(result.parseError).toBeDefined();
+  });
+
   it("computes registrable domain, public suffix, and subdomain for Turkish domains", () => {
     const result = canonicalizeUrl("https://login.akbank.com.tr/");
 
@@ -103,6 +129,27 @@ describe("canonicalizeUrl", () => {
     expect(result.registrableDomain).toBe("example.co.uk");
     expect(result.publicSuffix).toBe("co.uk");
     expect(result.subdomain).toBe("sub");
+  });
+
+  it("keeps phishing brand labels outside the registrable domain when they are only subdomains", () => {
+    const result = canonicalizeUrl("https://akbank.com.tr.evil.com/path");
+
+    expect(result.hostname).toBe("akbank.com.tr.evil.com");
+    expect(result.registrableDomain).toBe("evil.com");
+    expect(result.publicSuffix).toBe("com");
+    expect(result.subdomain).toBe("akbank.com.tr");
+  });
+
+  it.each([
+    ["https://www.example.com./", "www.example.com", true],
+    ["https://user:pass@example.com/", "example.com", false],
+    ["https://login.akbank.com.tr/path", "login.akbank.com.tr", false],
+  ])("records canonical URL security flags for %s", (url, hostname, trailingDot) => {
+    const result = canonicalizeUrl(url);
+
+    expect(result.hostname).toBe(hostname);
+    expect(result.hasTrailingDot).toBe(trailingDot);
+    expect(result.hasCredentials).toBe(url.includes("user:pass"));
   });
 
   it.each([
