@@ -71,8 +71,14 @@ export function calculateScore(metrics: WeeklyMetrics, settingsContext?: ScoreSe
   // Cezalari kismen dengeler; toplam skor 100 tavaninda kapali.
   const safeBonus = (settingsContext?.uniqueSafeDomainCount ?? 0) * SAFE_DOMAIN_BONUS;
 
+  // "Tehdit yoksa +10, risk yoksa +5" odullendirmesi — cezalarin tam tersi
+  // konumda pozitif pekistirme. Kullanici "0 tehdit" goruyorsa skor da
+  // bunu odullendirmeli, sadece "ceza almadim" demek yetmiyor.
+  const cleanThreatReward = dangerous + suspicious === 0 ? 10 : 0;
+  const cleanRiskReward = unknown === 0 ? 5 : 0;
+
   const totalPenalty = dangerousPenalty + suspiciousPenalty + unknownPenalty + settingsPenalty;
-  const rawScore = STARTING_SCORE - totalPenalty + safeBonus;
+  const rawScore = STARTING_SCORE - totalPenalty + safeBonus + cleanThreatReward + cleanRiskReward;
   const score = Math.max(MIN_SCORE, Math.min(STARTING_SCORE, rawScore));
 
   if (dangerous > 0) {

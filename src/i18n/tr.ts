@@ -335,12 +335,11 @@ const tr = {
     safeActive: (count: number) =>
       `${count} farklı güvenli sitede gezindiniz.`,
     safeClean: "Henüz güvenli ziyaret kaydı yok.",
-    threatActive: (count: number) =>
-      `Sistem analizi: ${count} farklı tehdit vektörü engellendi.`,
-    threatClean: "Tehdit vektörü saptanmadı, kalkanlar tam kapasitede.",
+    threatActive: (count: number) => `${count} adet tehlike engellendi.`,
+    threatClean: "Tehdit bulunmadı",
     riskActive: (count: number) =>
-      `${count} farklı potansiyel risk noktası tespit edildi.`,
-    riskClean: "Risk analizi temiz, anomali yok.",
+      `${count} adet potansiyel risk tespit edildi.`,
+    riskClean: "Potansiyel risk bulunmadı",
     scanOn: "Detaylı Güvenlik Taraması aktif ve koruyor.",
     scanOff: "'Detaylı Güvenlik Taraması' modülü pasif.",
     pointSuffix: "Puan",

@@ -141,8 +141,13 @@ export default function DashboardTab() {
   //   − risk    × 5
   //   − (ayar kapali ? 10 : 0)
   //   + guvenli × 1
-  // 0 - 100 araliginda clamp; alt sinir yok (0'a inebilir, kullanici tam
-  // matematigi gorsun istedi).
+  //   + (tehdit yoksa +10 odul)
+  //   + (risk yoksa  +5  odul)
+  // Odul mantigi: "ceza" yerine "odul" framing'i ile kullaniciya pozitif
+  // pekistirme; hem panel rozetinde "+10/+5 Puan" yesil olarak gosterilir
+  // hem de skora gercekten eklenir. Tavan 100, taban 0 ile sinirli.
+  const threatClean = uniqueThreatCount === 0;
+  const riskClean = uniqueUnknownCount === 0;
   const computedScore = Math.max(
     0,
     Math.min(
@@ -151,7 +156,9 @@ export default function DashboardTab() {
         - uniqueThreatCount * 10
         - uniqueUnknownCount * 5
         - (scanIsOn ? 0 : 10)
-        + uniqueSafeCount * 1,
+        + uniqueSafeCount * 1
+        + (threatClean ? 10 : 0)
+        + (riskClean ? 5 : 0),
     ),
   );
   const animatedScore = useCountUp(computedScore, 300);
@@ -346,7 +353,8 @@ export default function DashboardTab() {
               <ScoreInsight tone="success" text={t.skorBreakdown.safeClean} />
             )}
 
-            {/* Tehdit — benzersiz domain bazinda, her biri -10 puan. */}
+            {/* Tehdit — benzersiz domain bazinda, her biri -10 puan;
+                tehdit yoksa +10 odul. */}
             {uniqueThreatDomains > 0 ? (
               <ScoreInsight
                 tone="warning"
@@ -354,10 +362,15 @@ export default function DashboardTab() {
                 delta={-(uniqueThreatDomains * 10)}
               />
             ) : (
-              <ScoreInsight tone="success" text={t.skorBreakdown.threatClean} />
+              <ScoreInsight
+                tone="success"
+                text={t.skorBreakdown.threatClean}
+                delta={10}
+              />
             )}
 
-            {/* Risk — benzersiz UNKNOWN domain bazinda, her biri -5 puan. */}
+            {/* Risk — benzersiz UNKNOWN domain bazinda, her biri -5 puan;
+                risk yoksa +5 odul. */}
             {uniqueUnknownDomains > 0 ? (
               <ScoreInsight
                 tone="warning"
@@ -365,7 +378,11 @@ export default function DashboardTab() {
                 delta={-(uniqueUnknownDomains * 5)}
               />
             ) : (
-              <ScoreInsight tone="success" text={t.skorBreakdown.riskClean} />
+              <ScoreInsight
+                tone="success"
+                text={t.skorBreakdown.riskClean}
+                delta={5}
+              />
             )}
 
             {/* Detayli Guvenlik Taramasi: kapaliysa -10 puan, aciksa sadece
