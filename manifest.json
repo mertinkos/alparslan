@@ -41,5 +41,11 @@
     "webRequest",
     "declarativeNetRequest"
   ],
-  "version": "0.2.0"
+  "version": "0.2.0",
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/alparslan_logo.svg"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

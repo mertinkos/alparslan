@@ -118,9 +118,11 @@ function updateProgress(stepIndex: number, ms?: number): void {
   if (ms !== undefined) initProgress.steps[stepIndex].ms = ms;
   const done = initProgress.steps.filter((s) => s.done).length;
   initProgress.percent = Math.round((done / initProgress.steps.length) * 100);
-  initProgress.step = stepIndex < initProgress.steps.length - 1
-    ? initProgress.steps[stepIndex + 1].name + " " + t.init.loadingSuffix
-    : t.init.ready;
+  // Label always reflects the FIRST still-pending step, not stepIndex+1. This
+  // keeps the text correct (and never running backwards) when the parallel
+  // steps below finish out of order.
+  const nextPending = initProgress.steps.find((s) => !s.done);
+  initProgress.step = nextPending ? nextPending.name + " " + t.init.loadingSuffix : t.init.ready;
 }
 
 async function initServiceWorker(): Promise<void> {
@@ -171,27 +173,25 @@ async function initServiceWorker(): Promise<void> {
   initTimings.cacheInit = Date.now() - t1;
   updateProgress(1, initTimings.cacheInit);
 
-  // Steps 3-5: USOM + whitelist + breach (parallel)
+  // Steps 3-5: USOM + whitelist + breach run in parallel, but each reports its
+  // OWN progress the moment it settles — so the bar climbs 40→60→80→100
+  // smoothly instead of jumping straight from 40 to 100 when all three finish
+  // together.
   initProgress.step = t.init.usom + " " + t.init.loadingSuffix;
   const t2 = Date.now();
 
-  const [usomResult, wlResult, breachResult] = await Promise.allSettled([
-    initUsomBlocklist(),
-    initWhitelist(),
-    initBreachCache(),
-  ]);
+  const usomP = initUsomBlocklist()
+    .catch((e) => logger.warn("USOM init failed:", e))
+    .finally(() => updateProgress(2, Date.now() - t2));
+  const wlP = initWhitelist()
+    .catch((e) => logger.warn("Whitelist init failed:", e))
+    .finally(() => updateProgress(3, Date.now() - t2));
+  const breachP = initBreachCache()
+    .catch((e) => logger.warn("Breach init failed:", e))
+    .finally(() => updateProgress(4, Date.now() - t2));
 
-  const t2end = Date.now() - t2;
-  initTimings.usomWhitelistBreach = t2end;
-
-  updateProgress(2, t2end); // USOM
-  if (usomResult.status === "rejected") logger.warn("USOM init failed:", usomResult.reason);
-
-  updateProgress(3, t2end); // Whitelist
-  if (wlResult.status === "rejected") logger.warn("Whitelist init failed:", wlResult.reason);
-
-  updateProgress(4, t2end); // Breach
-  if (breachResult.status === "rejected") logger.warn("Breach init failed:", breachResult.reason);
+  await Promise.allSettled([usomP, wlP, breachP]);
+  initTimings.usomWhitelistBreach = Date.now() - t2;
 
   // Set URL check cache TTL from settings
   setTtlMinutes(state.settings.urlCacheTtlMinutes);
@@ -206,6 +206,13 @@ async function initServiceWorker(): Promise<void> {
   initProgress.step = t.init.ready;
   initProgress.percent = 100;
   initDone = true;
+
+  // Mark that the loading UI has run once for THIS browser session. session
+  // storage lives in memory and is wiped when Chrome fully closes, but it
+  // survives service-worker restarts within the session — so the popup shows
+  // the loading bar only on the first cold start, never again on the silent
+  // worker re-inits that happen during normal browsing.
+  chrome.storage.session?.set?.({ alparslanInitDone: true });
   e2eReadiness.swInitDone = true;
   resolveInit();
   logger.debug(`Service worker initialized in ${initTimings.total}ms (storage: ${initTimings.storageLoad}ms, cache: ${initTimings.cacheInit}ms)`);
@@ -235,6 +242,49 @@ async function initServiceWorker(): Promise<void> {
 
 initServiceWorker().catch((err) => {
   logger.warn("Service worker init error:", err);
+});
+
+// Reset session-only counters whenever Chrome appears to be freshly opened.
+//
+// Kontrol / Tehdit / Tracker / Bilinmeyen sayaçları "bu oturumda olanları"
+// göstermek için kullanıcı talebi: kalıcı (1700+ Kontrol) sayılar yerine
+// Chrome her başlatıldığında sıfırdan saymaya başlasın.
+//
+// Two complementary triggers because `chrome.runtime.onStartup` is unreliable
+// for unpacked extensions and silently skipped when Chrome runs background
+// apps (Windows tray) so the user closes all windows but Chrome stays alive:
+//
+//   1. `chrome.runtime.onStartup` — the official "Chrome launched" hook;
+//      fires once per profile start, ideal when it works.
+//   2. `chrome.windows.onCreated` + windows.length === 1 — fallback: when a
+//      new window is created and it's the ONLY window, the user effectively
+//      restarted Chrome from their perspective.
+//
+// `state.history = []` because the popup's Bilinmeyen count is derived from
+// history, so a real reset has to wipe both.
+function resetSessionCounters(reason: string): void {
+  logger.debug(`Session reset: ${reason}`);
+  state.stats = { ...DEFAULT_STATS };
+  state.history = [];
+  chrome.storage.sync.set({ stats: state.stats });
+  chrome.storage.local.set({ history: state.history });
+}
+
+chrome.runtime.onStartup?.addListener?.(() => resetSessionCounters("onStartup"));
+
+// Optional-chain through to `.addListener` because vitest mocks of the
+// chrome.* surface only stub the bits the production code calls — without
+// this guard the test boot crashes with "Cannot read addListener of
+// undefined" before any assertions run.
+chrome.windows?.onCreated?.addListener?.(async () => {
+  try {
+    const windows = await chrome.windows.getAll();
+    if (windows.length === 1) {
+      resetSessionCounters("first window opened");
+    }
+  } catch {
+    /* windows API not available — fall back to onStartup */
+  }
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -376,6 +426,11 @@ chrome.runtime.onMessage.addListener(
         const result = await checkUrlConfirmed(url, state.settings.protectionLevel);
         if (result.level === "DANGEROUS" || result.level === "SUSPICIOUS") {
           state.stats.threatsBlocked++;
+        }
+        // Record DANGEROUS / SUSPICIOUS / UNKNOWN — the dashboard score
+        // penalises all three (UNKNOWN counts too because we couldn't
+        // confidently mark it safe).
+        if (result.level === "DANGEROUS" || result.level === "SUSPICIOUS" || result.level === "UNKNOWN") {
           recordThreatVisit(result.level);
         }
         persistStats();
@@ -421,7 +476,10 @@ chrome.runtime.onMessage.addListener(
     if (message.type === "SETTINGS_UPDATED") {
       const newSettings = message.settings as ExtensionSettings;
       const oldSettings = state.settings;
-      state.settings = newSettings;
+      // Merge with defaults so an incoming partial settings object (e.g.
+      // intro-screen activation that doesn't include every boolean) doesn't
+      // accidentally drop keys like `speechBubbleEnabled` to undefined.
+      state.settings = { ...DEFAULT_SETTINGS, ...newSettings };
 
       // Update URL cache TTL
       setTtlMinutes(newSettings.urlCacheTtlMinutes);
@@ -474,10 +532,45 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    // "Skoru Sıfırla" — kullanici dashboard butonundan tek tikla haftalik
+    // metrikleri ve oturum istatistiklerini sifirlar. settings, beyaz liste
+    // gibi diger sync verilerine dokunmaz; "Tüm Verileri Temizle"den daha
+    // hedefli bir aksiyondur.
+    if (message.type === "RESET_SCORE") {
+      state.stats = { ...DEFAULT_STATS };
+      state.history = [];
+      chrome.storage.sync.set({ stats: state.stats });
+      chrome.storage.local.set({ history: state.history });
+      chrome.storage.sync.remove(["weeklyMetrics", "previousWeekMetrics"], () => {
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+
     if (message.type === "TRACKER_BLOCKED") {
       state.stats.trackersBlocked++;
       persistStats();
       recordTrackerBlocked();
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    // The popup short-circuits CHECK_URL for chrome:// and about: pages (we
+    // can't actually analyze browser-internal pages), so without this they
+    // never reach the history → the "Bilinmeyen" counter stayed at 0 even
+    // when the popup showed "Bilinmiyor". Record them here so the counter
+    // and list reflect what the user sees. Simple dedup against the most
+    // recent entry prevents spamming when the popup is reopened on the
+    // same internal page.
+    if (message.type === "RECORD_UNKNOWN_VIEW") {
+      const url = message.url;
+      if (typeof url === "string" && url) {
+        const safeUrl = sanitizeUrlForStorage(url);
+        const last = state.history[0];
+        if (!last || last.url !== safeUrl || last.level !== "UNKNOWN") {
+          addHistoryEntry(url, "UNKNOWN", 0);
+        }
+      }
       sendResponse({ ok: true });
       return true;
     }
@@ -567,8 +660,50 @@ chrome.runtime.onMessage.addListener(
       (async () => {
         const currentWeek = await collectCurrentWeekMetrics();
         const previousWeek = await collectPreviousWeekMetrics();
-        const dashboard = calculateScore(currentWeek);
+        // Ayarlari her seferinde TAZE olarak chrome.storage.sync'den okuyoruz.
+        // state.settings cache'lenmis olabilir; ozellikle Tum Ayarlar
+        // sayfasindan toggle degisip popup hala acik kaldigi senaryoda
+        // skor yanlis hesaplanmasin diye storage'a guveniyoruz.
+        const freshSettings = await new Promise<ExtensionSettings>((resolve) => {
+          chrome.storage.sync.get(["settings"], (result) => {
+            resolve({ ...DEFAULT_SETTINGS, ...(result.settings as Partial<ExtensionSettings> ?? {}) });
+          });
+        });
+        // Skor BENZERSIZ domain bazinda hesaplanir: ayni siteye 30 kere
+        // girse bile bir kere puan kesilir, sonraki ziyaretler skoru
+        // dusurmez.
+        const uniqueThreatDomains = new Set(
+          state.history
+            .filter((h) => h.level === "DANGEROUS" || h.level === "SUSPICIOUS")
+            .map((h) => h.domain),
+        ).size;
+        const uniqueUnknownDomains = new Set(
+          state.history.filter((h) => h.level === "UNKNOWN").map((h) => h.domain),
+        ).size;
+        const uniqueSafeDomains = new Set(
+          state.history.filter((h) => h.level === "SAFE").map((h) => h.domain),
+        ).size;
+        const syntheticMetrics = {
+          ...currentWeek,
+          dangerousSitesVisited: 0,
+          suspiciousSitesVisited: uniqueThreatDomains,
+          unknownSitesVisited: uniqueUnknownDomains,
+        };
+        const dashboard = calculateScore(syntheticMetrics, {
+          networkMonitoringEnabled: freshSettings.networkMonitoringEnabled,
+          uniqueSafeDomainCount: uniqueSafeDomains,
+        });
         dashboard.previousWeek = previousWeek;
+        // Skor Analizi panosu icin TAM olarak skor hesabinda kullandigimiz
+        // sayilari da paylasiyoruz. Boylece popup kendi history state'inden
+        // tekrar saymak zorunda kalmiyor; aynı kaynaktan veri = uyusmamazlik
+        // yok.
+        dashboard.insightCounts = {
+          uniqueSafe: uniqueSafeDomains,
+          uniqueThreat: uniqueThreatDomains,
+          uniqueUnknown: uniqueUnknownDomains,
+          scanOn: freshSettings.networkMonitoringEnabled !== false,
+        };
         sendResponse({ dashboard });
       })();
       return true;

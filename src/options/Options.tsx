@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { DEFAULT_SETTINGS, type ExtensionSettings } from "@/utils/types";
-import type { DashboardData } from "@/dashboard/types";
 import { normalizeWhitelistInput } from "@/utils/whitelist-normalize";
 import t from "@/i18n/tr";
 
@@ -18,7 +17,8 @@ export default function Options() {
   const [newDomain, setNewDomain] = useState("");
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDisableNotif, setShowDisableNotif] = useState(false);
 
   useEffect(() => {
     chrome.storage.sync.get(["settings"], (result) => {
@@ -26,14 +26,6 @@ export default function Options() {
         setSettings({ ...DEFAULT_SETTINGS, ...(result.settings as ExtensionSettings) });
       }
     });
-    chrome.runtime.sendMessage(
-      { type: "GET_DASHBOARD_SCORE" },
-      (response: { dashboard: DashboardData } | null) => {
-        if (response?.dashboard) {
-          setDashboard(response.dashboard);
-        }
-      },
-    );
   }, []);
 
   const saveSettings = useCallback((updated: ExtensionSettings) => {
@@ -49,8 +41,14 @@ export default function Options() {
     saveSettings({ ...settings, protectionLevel: level });
   };
 
+  // Mirrors the popup "Tehlike Uyarıları" toggle: both control `showDomWarnings`
+  // so flipping one reflects in the other. Turning it OFF asks for confirmation.
   const handleNotificationsToggle = () => {
-    saveSettings({ ...settings, notificationsEnabled: !settings.notificationsEnabled });
+    if (settings.showDomWarnings !== false) {
+      setShowDisableNotif(true); // currently ON → confirm before disabling
+    } else {
+      saveSettings({ ...settings, showDomWarnings: true }); // currently OFF → enable
+    }
   };
 
   const handleNetworkMonitoringToggle = () => {
@@ -77,9 +75,15 @@ export default function Options() {
 
   const handleClearData = () => {
     chrome.storage.sync.clear(() => {
-      setSettings(DEFAULT_SETTINGS);
-      setCleared(true);
-      setTimeout(() => setCleared(false), 2000);
+      // Also clear chrome.storage.local — that's where the breach-banner
+      // "bir daha gösterme" dismissed-domains list lives, plus tarama
+      // history and any other locally-cached state. Without this, users
+      // expect a full reset but the dismissed banners stay silenced.
+      chrome.storage.local.remove(["alparslan-breach-dismissed-domains", "history"], () => {
+        setSettings(DEFAULT_SETTINGS);
+        setCleared(true);
+        setTimeout(() => setCleared(false), 2000);
+      });
     });
   };
 
@@ -95,52 +99,6 @@ export default function Options() {
           </p>
         </div>
       </div>
-
-      {/* Security Score Summary */}
-      {dashboard && (
-        <Section title={t.options.weeklySummary}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                border: "3px solid " + (dashboard.score >= 80 ? "#16a34a" : dashboard.score >= 50 ? "#d97706" : "#dc2626"),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 24,
-                fontWeight: 700,
-                color: dashboard.score >= 80 ? "#16a34a" : dashboard.score >= 50 ? "#d97706" : "#dc2626",
-              }}
-            >
-              {dashboard.score}
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                {dashboard.score >= 80
-                  ? t.scoreMessages.great
-                  : dashboard.score >= 50
-                    ? t.scoreMessages.good
-                    : t.scoreMessages.warning}
-              </div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-                {t.weeklyStats(dashboard.currentWeek.urlsChecked)}
-              </div>
-            </div>
-          </div>
-          {dashboard.tips.length > 0 && (
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>{t.dashboard.suggestions}</div>
-              {dashboard.tips.map((tip, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#78350f", padding: "3px 0" }}>
-                  * {tip}
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
-      )}
 
       {/* Saved notification */}
       {saved && (
@@ -220,9 +178,9 @@ export default function Options() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.options.threatNotifications}</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.settings.dangerWarnings}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              {t.options.threatNotificationsDesc}
+              {t.settings.dangerWarningsDesc}
             </div>
           </div>
           <div
@@ -231,7 +189,7 @@ export default function Options() {
               width: 44,
               height: 24,
               borderRadius: 12,
-              background: settings.notificationsEnabled ? "#22c55e" : "#d1d5db",
+              background: settings.showDomWarnings !== false ? "#22c55e" : "#d1d5db",
               position: "relative",
               transition: "background 0.2s",
               cursor: "pointer",
@@ -246,7 +204,7 @@ export default function Options() {
                 background: "white",
                 position: "absolute",
                 top: 2,
-                left: settings.notificationsEnabled ? 22 : 2,
+                left: settings.showDomWarnings !== false ? 22 : 2,
                 transition: "left 0.2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
               }}
@@ -283,9 +241,9 @@ export default function Options() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.options.networkListenLabel}</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.settings.networkMonitoring}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              {t.options.networkListenDesc}
+              {t.settings.networkMonitoringDesc}
             </div>
           </div>
           <div
@@ -434,7 +392,7 @@ export default function Options() {
       {/* Clear Data */}
       <Section title={t.options.dataManagement}>
         <button
-          onClick={handleClearData}
+          onClick={() => setShowClearConfirm(true)}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "#fee2e2";
             e.currentTarget.style.borderColor = "#fca5a5";
@@ -476,6 +434,150 @@ export default function Options() {
       <div style={{ marginTop: 32, textAlign: "center", fontSize: 12, color: "#9ca3af" }}>
         {t.footer}
       </div>
+
+      {/* Disable "Tehlike Uyarıları" confirmation — same dialog as the popup.
+          Prominent green "keep protection" button, dim "disable" text link. */}
+      {showDisableNotif && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 14,
+              padding: 20,
+              maxWidth: 380,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
+              {t.confirmDisableNotif.message}
+            </div>
+            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5, marginBottom: 18 }}>
+              {t.confirmDisableNotif.detail}
+            </div>
+            <button
+              onClick={() => setShowDisableNotif(false)}
+              style={{
+                width: "100%",
+                padding: "11px 0",
+                background: "#16a34a",
+                border: "none",
+                borderRadius: 8,
+                color: "white",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                marginBottom: 10,
+              }}
+            >
+              {t.confirmDisableNotif.keep}
+            </button>
+            <button
+              onClick={() => {
+                saveSettings({ ...settings, showDomWarnings: false });
+                setShowDisableNotif(false);
+              }}
+              style={{
+                width: "100%",
+                padding: "6px 0",
+                background: "none",
+                border: "none",
+                color: "#9ca3af",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {t.confirmDisableNotif.disable}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clear-all confirmation modal — destructive action gated behind an
+          explicit confirm. Neutral "cancel" + red "confirm" buttons. */}
+      {showClearConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 14,
+              padding: 20,
+              maxWidth: 380,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
+              {t.confirmClearData.message}
+            </div>
+            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5, marginBottom: 18 }}>
+              {t.confirmClearData.detail}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  background: "#f3f4f6",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  color: "#374151",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t.confirmClearData.cancel}
+              </button>
+              <button
+                onClick={() => {
+                  handleClearData();
+                  setShowClearConfirm(false);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  background: "#dc2626",
+                  border: "none",
+                  borderRadius: 8,
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t.confirmClearData.confirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

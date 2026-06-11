@@ -277,7 +277,7 @@ describe("Background Service Worker", () => {
       );
 
       expect(sendResponse).toHaveBeenCalledWith(
-        expect.objectContaining({ level: "SAFE", reasons: ["Beyaz listede"] }),
+        expect.objectContaining({ level: "SAFE", reasons: ["Güvenilir bağlantı listemde"] }),
       );
     });
   });
