@@ -43,6 +43,8 @@ export function StatusPanel({
   reasons: string[];
   pageReasons: string[];
   isWhitelisted: boolean;
+  /** Whitelist input degeri — su an JSX'te kullanilmıyor ama parent App'ten
+   *  geliyor, ileride autofill chip burada kullanilirsa diye prop'ta tutuldu. */
   popupWhitelistInput: string;
   setPopupWhitelistInput: (v: string) => void;
   handleAddToWhitelist: () => void;
@@ -50,6 +52,10 @@ export function StatusPanel({
   setShowTrustConfirm: (v: boolean) => void;
   enabled: boolean;
 }) {
+  // Linter unused-prop uyarisini bastir — ileride autofill chip eklenirse
+  // doğrudan kullanılacaklar.
+  void popupWhitelistInput;
+  void setPopupWhitelistInput;
   return (
       <div
         style={{

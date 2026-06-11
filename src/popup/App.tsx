@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { type ThreatResult, type ExtensionStats, type ExtensionSettings, type ScanHistoryEntry, HISTORY_DISPLAY_LIMIT } from "@/utils/types";
+import { type ThreatResult, type ExtensionStats, type ExtensionSettings } from "@/utils/types";
 import TabBar, { type TabId } from "./TabBar";
-import DashboardTab, { SkorCountButton, SkorFilteredList } from "./DashboardTab";
+import DashboardTab from "./DashboardTab";
 import BreachBadge from "./BreachBadge";
 import { normalizeQuickWhitelistDomain, isDomainInWhitelist } from "./whitelist-helpers";
 import { useInitProgress } from "./hooks/useInitProgress";
@@ -9,7 +9,6 @@ import { useExtensionEnabled } from "./hooks/useExtensionEnabled";
 import { useScanHistory } from "./hooks/useScanHistory";
 import { useExtensionSettings } from "./hooks/useExtensionSettings";
 import { useProtectedDays } from "./hooks/useProtectedDays";
-import { SettingCard } from "./components/SettingCard";
 import { NotificationPanel } from "./components/NotificationPanel";
 import { SettingsTab } from "./components/SettingsTab";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -17,7 +16,6 @@ import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { DurumSkorCards } from "./components/DurumSkorCards";
 import { StatusPanel } from "./components/StatusPanel";
-import { narrateReason } from "./narrateReason";
 import t from "@/i18n/tr";
 
 export type SecurityStatus = "safe" | "dangerous" | "suspicious" | "unknown" | "loading" | "disabled";
@@ -55,40 +53,19 @@ export default function App() {
   const [url, setUrl] = useState<string>("");
   const [status, setStatus] = useState<SecurityStatus>("loading");
   // Enabled toggle + storage senkron mantigi useExtensionEnabled hook'unda.
-  const { enabled, setEnabled, toggleEnabled } = useExtensionEnabled();
+  const { enabled, toggleEnabled } = useExtensionEnabled();
   const [reasons, setReasons] = useState<string[]>([]);
-  const [score, setScore] = useState<number>(0);
   const [stats, setStats] = useState<ExtensionStats>({ urlsChecked: 0, threatsBlocked: 0, trackersBlocked: 0 });
-  const [showHistory, setShowHistory] = useState(false);
   // Tarama gecmisi (history) yukleme + reaktif senkron mantigi
-  // useScanHistory hook'unda. setHistory ve loadHistory hook ustunden gelir.
-  const { history, reloadHistory: loadHistory, clearLocalHistory: clearHistoryLocal } = useScanHistory();
+  // useScanHistory hook'unda. clearLocalHistory hook ustunden gelir.
+  const { history } = useScanHistory();
   const [pageReasons, setPageReasons] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("status");
   // Settings yukleme + reaktif senkron useExtensionSettings hook'una tasindi.
   const { settings, setSettings, saveSettings } = useExtensionSettings();
-  const [tabStats, setTabStats] = useState<{
-    requestsChecked: number;
-    threatsDetected: number;
-    requestsBlocked: number;
-    domains: string[];
-    threats: Array<{ domain: string; level: string; timestamp: number }>;
-  } | null>(null);
-  const [listStats, setListStats] = useState<{
-    blacklistSize: number;
-    whitelistSize: number;
-  } | null>(null);
   const [isWhitelisted, setIsWhitelisted] = useState<boolean>(false);
-  const [showDetails, setShowDetails] = useState<boolean>(false);
   const [notificationsOpen, setNotificationsOpen] = useState<boolean>(false);
   const [infoOpen, setInfoOpen] = useState<boolean>(false);
-  const [historyFilter, setHistoryFilter] = useState<"threat" | "tracker" | "unknown" | null>(null);
-  // Tracks whether the history list was opened from the "Tarama geçmişi"
-  // button (true) or from a stat card (false). The two share the same list
-  // contents when no filter is set, but the toggle button below them reads
-  // differently — "Tarama Geçmişini Gizle" vs "Kontrol Listesini Gizle" — so
-  // the user knows which surface they're closing.
-  const [openedFromHistoryBtn, setOpenedFromHistoryBtn] = useState<boolean>(false);
   // Koruma süresi hesabi (gun) useProtectedDays hook'unda.
   const protectedDays = useProtectedDays();
   const [popupWhitelistInput, setPopupWhitelistInput] = useState<string>("");
@@ -106,51 +83,12 @@ export default function App() {
 
   // saveSettings useExtensionSettings hook'una tasindi.
 
-  // Pull global list sizes + per-tab network monitoring stats for the active
-  // tab. Called on init-ready and again whenever the detail panel opens.
-  const fetchListStats = useCallback(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
-      if (!tabId) return;
-      chrome.runtime.sendMessage({ type: "GET_LIST_STATS", tabId }, (response: unknown) => {
-        const r = response as {
-          blacklistSize?: number; whitelistSize?: number; dynamicWhitelistSize?: number;
-          tab?: { requestsChecked: number; threatsDetected: number; requestsBlocked: number; domains: string[]; threats: Array<{ domain: string; level: string; timestamp: number }> };
-        } | null;
-        if (r) {
-          setListStats({ blacklistSize: r.blacklistSize ?? 0, whitelistSize: (r.whitelistSize ?? 0) + (r.dynamicWhitelistSize ?? 0) });
-          // Fall back to a zero-state object when the background has no
-          // per-tab monitoring data yet — otherwise tabStats stays null and
-          // the detail panel is stuck on "Detaylar yükleniyor..." forever.
-          setTabStats(r.tab ?? { requestsChecked: 0, threatsDetected: 0, requestsBlocked: 0, domains: [], threats: [] });
-        }
-      });
-    });
-  }, []);
-
-  // Init durumu okuma & polling: useInitProgress hook'una tasindi (yukarida
-  // cagriliyor). Burada eskiden 2 ayri useEffect + setInitStatus/setInitDoneSession
-  // state'i vardi; sade tutmak icin disari cikarildi.
-
-  // Fetch all popup data — re-runs when init becomes ready
+  // Fetch popup stats — re-runs when init becomes ready.
   useEffect(() => {
-    // Enabled durumunu okuma useExtensionEnabled hook'una tasindi.
     chrome.runtime.sendMessage({ type: "GET_STATS" }, (response: { stats: ExtensionStats } | null) => {
       if (response?.stats) setStats(response.stats);
     });
-    // GET_SETTINGS useExtensionSettings hook'unda otomatik cagriliyor.
-    // Get per-tab network stats for the current tab
-    fetchListStats();
   }, [initStatus?.ready]);
-
-  // Re-fetch tab/network stats whenever the detail panel is opened. The
-  // initial fetch (on init-ready) can land before the background's per-tab
-  // monitoring has any data, leaving tabStats null and the panel stuck on
-  // "Detaylar yükleniyor...". Opening the panel forces a fresh pull so it
-  // populates immediately instead of waiting for a popup reopen.
-  useEffect(() => {
-    if (showDetails) fetchListStats();
-  }, [showDetails]);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -183,7 +121,6 @@ export default function App() {
           }
           setStatus(response.level.toLowerCase() as SecurityStatus);
           setReasons(response.reasons || []);
-          setScore(response.score || 0);
           setIsWhitelisted((response.reasons || []).includes(t.reasons.whitelisted));
         },
       );
@@ -250,38 +187,10 @@ export default function App() {
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, [checkWhitelistMembership]);
 
-  const handleToggleHistory = () => {
-    if (!showHistory) {
-      loadHistory();
-      setHistoryFilter(null);
-      setOpenedFromHistoryBtn(true);
-    }
-    setShowHistory(!showHistory);
-  };
-
-  const handleStatClick = (filter: "threat" | "tracker" | "unknown" | null) => {
-    // Toggle behaviour: clicking the same stat that's already open closes the
-    // list; clicking a different stat switches the filter (keeps it open);
-    // clicking while closed opens it. Either way, mark this as a stat-card
-    // open so the bottom toggle label reads "Kontrol/Tehdit/... Listesini
-    // Gizle" instead of the generic "Tarama Geçmişini Gizle".
-    if (showHistory && historyFilter === filter && !openedFromHistoryBtn) {
-      setShowHistory(false);
-      return;
-    }
-    setHistoryFilter(filter);
-    setOpenedFromHistoryBtn(false);
-    if (!showHistory) {
-      loadHistory();
-      setShowHistory(true);
-    }
-  };
-
-  const handleClearHistory = () => {
-    chrome.runtime.sendMessage({ type: "CLEAR_HISTORY" }, () => {
-      clearHistoryLocal();
-    });
-  };
+  // handleToggleHistory / handleStatClick / handleClearHistory eski "Tarama
+  // Geçmişi" panelinin handler'lariydi; bu panel Skor sekmesindeki
+  // SkorCountButton + SkorFilteredList yapısıyla degistirildi, eski
+  // handler'lara artik referans yok, silindi.
 
   // Closes the active tab from the in-bubble "Sayfayı Kapat" rescue button —
   // used in the suspicious/dangerous/unknown speech-bubble action row.
@@ -348,7 +257,6 @@ export default function App() {
   // `status` will already be "safe" so the override becomes a no-op.
   const displayStatus = isWhitelisted && status !== "loading" ? "safe" : status;
   const config = displayStatus === "loading" ? null : STATUS_CONFIG[displayStatus];
-  const icon = displayStatus === "loading" ? "" : STATUS_ICONS[displayStatus];
   const displayDomain = (() => {
     try {
       return new URL(url).hostname;
