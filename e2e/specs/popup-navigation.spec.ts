@@ -39,9 +39,11 @@ test.describe("Popup Navigation", () => {
     const popup = await openPopup(context, extensionId);
     await popup.getByText("Skor").click();
     await expect(popup.getByText("Günlük skor")).toBeVisible();
-    await popup.getByText("Durum").click();
-    // Durum sekmesi yeniden gorunur — sayac kartlari teyit eder.
-    await expect(popup.getByText("Tarama Geçmişi")).toBeVisible();
+    // Durum tab linkine .first() ile tıkla — "Durum" baska yerde de
+    // gecebilir (ornegin balon metni).
+    await popup.getByText("Durum").first().click();
+    // Sayac karti acik; .first() ile strict mode'dan kacin.
+    await expect(popup.getByText("Tarama Geçmişi").first()).toBeVisible({ timeout: 5000 });
     await popup.close();
   });
 

@@ -70,8 +70,11 @@ test.describe("Options Page — Negative Scenarios", () => {
 
   test("negative: should handle data clear gracefully", async ({ context, extensionId }) => {
     const options = await openOptionsPage(context, extensionId);
+    // "Tüm Verileri Temizle" artik direkt silmiyor, once onay modali aciliyor.
+    // Modal'da "Evet, Hepsini Temizle" butonuna basinca asil silme tetiklenir.
     await options.getByText("Tüm Verileri Temizle").click();
-    await expect(options.getByText("Veriler temizlendi")).toBeVisible({ timeout: 3000 });
+    await options.getByRole("button", { name: "Evet, Hepsini Temizle" }).click();
+    await expect(options.getByText("Veriler temizlendi")).toBeVisible({ timeout: 5000 });
     await expect(options.getByText("Koruma Seviyesi")).toBeVisible();
     await options.close();
   });

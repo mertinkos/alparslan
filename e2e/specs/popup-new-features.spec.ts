@@ -103,9 +103,10 @@ test.describe("Popup — Durum sekmesindeki sayac kartlari", () => {
   }) => {
     const popup = await openPopup(context, extensionId);
     // SkorCountButton kartlari tiklanabilir; tiklayinca filtreli liste
-    // acilir, basliginda "Tehdit Listesi" yazar.
-    await popup.getByRole("button", { name: /Engellenen Tehdit/ }).click();
-    await expect(popup.getByText("Tehdit Listesi")).toBeVisible();
+    // acilir, basliginda "Tehdit Listesi" yazar. role=button regex'i
+    // baska butonlari da match edebilir → .first() ile spesifik secim.
+    await popup.getByRole("button", { name: /Engellenen Tehdit/ }).first().click();
+    await expect(popup.getByText("Tehdit Listesi")).toBeVisible({ timeout: 5000 });
     await popup.close();
   });
 });
