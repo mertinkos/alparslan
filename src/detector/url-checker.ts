@@ -297,6 +297,19 @@ export function normalizeHomoglyphs(input: string): string {
   return result;
 }
 
+// {0,o}→"0", {1,l,i}→"1", {5,s}→"5" — applied to both sides so direction doesn't matter.
+// 8/b excluded — too many real brand names contain 'b'.
+function normalizeDigitLetterConfusables(s: string): string {
+  let result = "";
+  for (const c of s) {
+    if (c === "0" || c === "o") result += "0";
+    else if (c === "1" || c === "l" || c === "i") result += "1";
+    else if (c === "5" || c === "s") result += "5";
+    else result += c;
+  }
+  return result;
+}
+
 function stripSeparators(name: string): string {
   return name.replace(/[-_.]/g, "");
 }
@@ -328,6 +341,7 @@ export function checkTyposquatting(
   const normalizedName = normalizeHomoglyphs(rawName);
   const strippedName = stripSeparators(normalizedName);
   const hasHomoglyphs = rawName !== normalizedName || domain !== decoded;
+  const digNormName = normalizeDigitLetterConfusables(strippedName);
 
   // Check all subdomain parts for trusted name hiding (e.g. garanti.evil.com)
   const subdomainParts = decoded.split(".");
@@ -350,6 +364,15 @@ export function checkTyposquatting(
         similarTo: trusted,
         reason: hasHomoglyphs ? "homoglyph" : "tld-mismatch",
       };
+    }
+
+    // Check 1b: digit/letter confusables (#27) — s0k↔sok, b1m↔bim, n1l↔n11
+    const digNormTrusted = normalizeDigitLetterConfusables(strippedTrustedName);
+    if (
+      digNormName === digNormTrusted &&
+      (digNormName !== strippedName || digNormTrusted !== strippedTrustedName)
+    ) {
+      return { isSuspicious: true, similarTo: trusted, reason: "homoglyph" };
     }
 
     // Check 2: Damerau-Levenshtein distance (classic typosquatting).
