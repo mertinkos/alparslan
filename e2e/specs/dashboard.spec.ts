@@ -25,12 +25,12 @@ test.describe("Dashboard Score — Happy Path", () => {
   test("should show clean state messages when no activity", async ({ context, extensionId }) => {
     const popup = await openPopup(context, extensionId);
     await popup.getByText("Skor").click();
-    // "Tehdit bulunmadı" hem skorCards.threatZero (Durum sayac karti zero
-    // state) hem skorBreakdown.threatClean (Skor Analizi panosu) için
-    // kullaniliyor; strict mode violation'i onlemek icin .first().
-    // "Potansiyel risk bulunmadı" sadece riskClean'de, tekil.
-    await expect(popup.getByText("Tehdit bulunmadı").first()).toBeVisible();
-    await expect(popup.getByText("Potansiyel risk bulunmadı")).toBeVisible();
+    // Skor sekmesi yuklendigini once "Skor Analizi" basligi ile teyit et;
+    // sonra clean state mesajlarini ara. Dashboard.score backend'den
+    // gelene kadar loading state vardir, mesajlar henuz olmaz.
+    await expect(popup.getByText("Skor Analizi")).toBeVisible({ timeout: 10000 });
+    await expect(popup.getByText("Tehdit bulunmadı").first()).toBeVisible({ timeout: 5000 });
+    await expect(popup.getByText("Potansiyel risk bulunmadı")).toBeVisible({ timeout: 5000 });
     await popup.close();
   });
 
