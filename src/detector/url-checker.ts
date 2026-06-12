@@ -125,6 +125,17 @@ const BRAND_SUBDOMAINS: ReadonlySet<string> = new Set([
   "cloudflarestream.com",
 ]);
 
+const SUSPICIOUS_KEYWORDS: ReadonlyArray<string> = [
+  "giris", "dogrulama", "hesap", "odeme", "sifre", "parola", "aktivasyon", "indirim", "online",
+  "login", "secure", "verify", "auth", "signin", "banking", "payment",
+];
+
+const GENERIC_BRAND_NAMES: ReadonlySet<string> = new Set([
+  "turkiye", "google", "microsoft", "apple", "amazon",
+  "youtube", "facebook", "instagram", "twitter", "paypal",
+  "netflix", "spotify",
+]);
+
 // Well-known trusted domains — phishing targets in Turkey + major global sites
 const TRUSTED_DOMAINS = new Set([
   // Turkey — government
@@ -315,24 +326,27 @@ function stripSeparators(name: string): string {
 }
 
 function extractName(rootDomain: string): string {
-  // Extract just the name part: "isbank.com.tr" -> "isbank", "example.com" -> "example"
   return rootDomain.split(".")[0];
+}
+
+type TyposquattingCandidate = { similarTo: string; reason: string; priority: number };
+
+function pickBetter(
+  current: TyposquattingCandidate | null,
+  candidate: TyposquattingCandidate,
+): TyposquattingCandidate {
+  return !current || candidate.priority < current.priority ? candidate : current;
 }
 
 export function checkTyposquatting(
   domain: string,
 ): { isSuspicious: boolean; similarTo: string | null; reason: string | null } {
-  // Decode punycode labels so homoglyph detection works on Unicode chars
   const decoded = decodePunycodeDomain(domain);
   const root = extractRootDomain(decoded);
 
-  // If the domain itself is trusted, no typosquatting
   if (TRUSTED_DOMAINS.has(root)) {
     return { isSuspicious: false, similarTo: null, reason: null };
   }
-  // Brand-operated auxiliary domains (microsoftonline.com, googleapis.com …)
-  // — legitimately contain the brand name and must not trip the
-  // "contains-trusted-name" rule below.
   if (BRAND_SUBDOMAINS.has(root)) {
     return { isSuspicious: false, similarTo: null, reason: null };
   }
@@ -343,9 +357,10 @@ export function checkTyposquatting(
   const hasHomoglyphs = rawName !== normalizedName || domain !== decoded;
   const digNormName = normalizeDigitLetterConfusables(strippedName);
 
-  // Check all subdomain parts for trusted name hiding (e.g. garanti.evil.com)
   const subdomainParts = decoded.split(".");
   const allParts = subdomainParts.length > 2 ? subdomainParts.slice(0, -2) : [];
+
+  let best: TyposquattingCandidate | null = null;
 
   for (const trusted of TRUSTED_DOMAINS) {
     const trustedRoot = extractRootDomain(trusted);
@@ -353,20 +368,16 @@ export function checkTyposquatting(
     const strippedTrustedName = stripSeparators(trustedName);
 
     if (root === trustedRoot) continue;
-
-    // Skip very short trusted names (≤2 chars) to avoid false positives
     if (strippedTrustedName.length <= 2) continue;
 
-    // Check 1: Same name but different TLD (turkiye.com vs turkiye.gov.tr)
     if (normalizedName === trustedName || strippedName === strippedTrustedName) {
-      return {
-        isSuspicious: true,
-        similarTo: trusted,
-        reason: hasHomoglyphs ? "homoglyph" : "tld-mismatch",
-      };
+      if (hasHomoglyphs) {
+        return { isSuspicious: true, similarTo: trusted, reason: "homoglyph" };
+      }
+      best = pickBetter(best, { similarTo: trusted, reason: "tld-mismatch", priority: 3 });
+      continue;
     }
 
-    // Check 1b: digit/letter confusables (#27) — s0k↔sok, b1m↔bim, n1l↔n11
     const digNormTrusted = normalizeDigitLetterConfusables(strippedTrustedName);
     if (
       digNormName === digNormTrusted &&
@@ -375,55 +386,50 @@ export function checkTyposquatting(
       return { isSuspicious: true, similarTo: trusted, reason: "homoglyph" };
     }
 
-    // Check 2: Damerau-Levenshtein distance (classic typosquatting).
-    // For names ≤ 4 chars, ANY distance of 1 is too loose — unrelated
-    // 3-letter acronyms (sok vs sgk, bim vs bing, ntv vs ptt) are almost
-    // never typos of each other. Skip short-name distance checks and rely
-    // on exact-name / homoglyph paths instead.
-    // For ≥ 5 chars, distance 1 or (distance 2 with length diff) are the
-    // canonical typo shapes.
     const distance = levenshteinDistance(strippedName, strippedTrustedName);
     const lenDiff = Math.abs(strippedName.length - strippedTrustedName.length);
     const shortName = strippedTrustedName.length <= 4 || strippedName.length <= 4;
     if (!shortName && (distance === 1 || (distance === 2 && lenDiff >= 1))) {
-      return {
-        isSuspicious: true,
+      best = pickBetter(best, {
         similarTo: trusted,
         reason: hasHomoglyphs ? "homoglyph" : "edit-distance",
-      };
+        priority: 1,
+      });
     }
 
-    // Check 3: Trusted name contained as substring (securegaranti.com.tr)
-    // Only for names long enough to avoid false positives (≥5 chars)
     if (strippedTrustedName.length >= 5 && strippedName.length > strippedTrustedName.length) {
       if (strippedName.includes(strippedTrustedName)) {
-        return {
-          isSuspicious: true,
-          similarTo: trusted,
-          reason: "contains-trusted-name",
-        };
+        const hasKeyword = SUSPICIOUS_KEYWORDS.some((kw) => strippedName.includes(kw));
+        const hasSeparator = rawName.includes("-");
+        const ratio = strippedName.length / strippedTrustedName.length;
+        const isGeneric = GENERIC_BRAND_NAMES.has(strippedTrustedName);
+
+        const shouldFlag = isGeneric
+          ? (hasKeyword || hasSeparator) && ratio < 2.0
+          : hasKeyword || hasSeparator;
+
+        if (shouldFlag) {
+          best = pickBetter(best, { similarTo: trusted, reason: "contains-trusted-name", priority: 4 });
+        }
       }
     }
 
-    // Check 4: Subdomain hiding (garanti.evil.com, isbank.phishing.net)
     for (const part of allParts) {
       const normalizedPart = normalizeHomoglyphs(part);
       if (normalizedPart === trustedName) {
-        return {
-          isSuspicious: true,
-          similarTo: trusted,
-          reason: "subdomain-impersonation",
-        };
+        best = pickBetter(best, { similarTo: trusted, reason: "subdomain-impersonation", priority: 2 });
+        break;
       }
       const partDistance = levenshteinDistance(normalizedPart, trustedName);
       if (trustedName.length >= 4 && partDistance > 0 && partDistance <= 2) {
-        return {
-          isSuspicious: true,
-          similarTo: trusted,
-          reason: "subdomain-typosquat",
-        };
+        best = pickBetter(best, { similarTo: trusted, reason: "subdomain-typosquat", priority: 2 });
+        break;
       }
     }
+  }
+
+  if (best !== null) {
+    return { isSuspicious: true, similarTo: best.similarTo, reason: best.reason };
   }
   return { isSuspicious: false, similarTo: null, reason: null };
 }
@@ -492,8 +498,7 @@ export function checkUrl(
     reasons.push(`${typo.similarTo} ile ${match.text}`);
   }
 
-  // Medium + High: suspicious keyword check
-  if (domain.includes("login") || domain.includes("secure") || domain.includes("verify")) {
+  if (SUSPICIOUS_KEYWORDS.some((kw) => domain.includes(kw))) {
     if (!TRUSTED_DOMAINS.has(rootDomain)) {
       score += 20;
       reasons.push(t.reasons.suspiciousKeyword);
