@@ -166,14 +166,20 @@ const LEGIT_CORPUS: string[] = [
   "https://www.vestel.com.tr/",
   "https://www.ebebek.com/",
   "https://www.morhipo.com/",
-  // Issue #39 regression — must NOT be flagged after contextual scoring fix
-  "https://turkiyeacikkaynakplatformu.com/", // "turkiye" without phishing keyword/separator
-  "https://garantibelgesi.com/",             // "garanti" in "guarantee document" — no signal
-  "https://garantiliurunler.com/",           // "garanti" in "guaranteed products" — no signal
-  "https://turkiyeyazilimvakfi.org/",        // "turkiye" in foundation domain, no signal
-  "https://sokak.org/",                      // "sok" < 5 chars → contains check never fires
-  "https://isbasiplatformu.com/",            // "isbasi" does not contain "isbank"
-  "https://garantifonlari.gov.tr/",          // "garanti" with .gov.tr — no keyword/separator
+  // Additional legitimate sites
+  "https://sahibinden.com/",
+  "https://turkiye.gov.tr/",
+  "https://www.canva.com/",
+  "https://www.linkedin.com/",
+  // Issue #39 must NOT be flagged after contextual scoring fix
+  "https://turkiyeacikkaynakplatformu.com/",
+  "https://garantibelgesi.com/",
+  "https://garantiliurunler.com/",
+  "https://turkiyeyazilimvakfi.org/",
+  "https://sokak.org/",
+  "https://isbasiplatformu.com/",
+  "https://garantifonlari.gov.tr/",
+  "https://goturkiye.com/",
 ];
 
 describe("Phase 3 — Detection effectiveness", () => {
@@ -195,8 +201,8 @@ describe("Phase 3 — Detection effectiveness", () => {
           tc.expected === "DANGEROUS"
             ? result.level === ThreatLevel.DANGEROUS
             : tc.expected === "SUSPICIOUS"
-            ? result.level === ThreatLevel.SUSPICIOUS
-            : flagged;
+              ? result.level === ThreatLevel.SUSPICIOUS
+              : flagged;
 
         if (passed) {
           metrics.tp++;
