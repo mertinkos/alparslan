@@ -210,23 +210,31 @@ export function extractRootDomain(hostname: string): string {
   return canonical.registrableDomain ?? canonical.hostname ?? hostname.toLowerCase();
 }
 
-function getRootDomainLabelCount(hostname: string): number {
-  const canonical = canonicalizeUrl(`https://${hostname}`);
+function getRootLabelCountFromCanonical(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): number {
   const root = canonical.registrableDomain ?? canonical.hostname ?? hostname.toLowerCase();
 
   return root.split(".").length;
 }
 
-function extractRootDomainPreservingLabels(hostname: string): string {
+function extractRootDomainPreservingLabels(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): string {
   const parts = hostname.toLowerCase().split(".");
-  const rootLabelCount = getRootDomainLabelCount(hostname);
+  const rootLabelCount = getRootLabelCountFromCanonical(hostname, canonical);
 
   return parts.slice(-rootLabelCount).join(".");
 }
 
-function extractSubdomainPartsPreservingLabels(hostname: string): string[] {
+function extractSubdomainPartsPreservingLabels(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): string[] {
   const parts = hostname.toLowerCase().split(".");
-  const rootLabelCount = getRootDomainLabelCount(hostname);
+  const rootLabelCount = getRootLabelCountFromCanonical(hostname, canonical);
 
   return parts.length > rootLabelCount ? parts.slice(0, -rootLabelCount) : [];
 }
@@ -332,10 +340,11 @@ function extractName(rootDomain: string): string {
 
 export function checkTyposquatting(
   domain: string,
+  canonical?: ReturnType<typeof canonicalizeUrl>,
 ): { isSuspicious: boolean; similarTo: string | null; reason: string | null } {
-  // Decode punycode labels so homoglyph detection works on Unicode chars
   const decoded = decodePunycodeDomain(domain);
-  const root = extractRootDomainPreservingLabels(decoded);
+  const resolvedCanonical = canonical ?? canonicalizeUrl(`https://${decoded}`);
+  const root = extractRootDomainPreservingLabels(decoded, resolvedCanonical);
 
   // If the domain itself is trusted, no typosquatting
   if (TRUSTED_DOMAINS.has(root)) {
@@ -355,7 +364,7 @@ export function checkTyposquatting(
   const digNormName = normalizeDigitLetterConfusables(strippedName);
 
   // Check all subdomain parts for trusted name hiding (e.g. garanti.evil.com)
-  const allParts = extractSubdomainPartsPreservingLabels(decoded);
+  const allParts = extractSubdomainPartsPreservingLabels(decoded, resolvedCanonical);
 
   for (const trusted of TRUSTED_DOMAINS) {
     const trustedRoot = extractRootDomain(trusted);
@@ -488,7 +497,7 @@ export function checkUrl(
   }
 
   // Medium + High: typosquatting check
-  const typo = checkTyposquatting(domain);
+  const typo = checkTyposquatting(domain, canonical);
   if (typo.isSuspicious) {
     const reasonLabels: Record<string, { score: number; text: string }> = {
       "homoglyph": { score: 100, text: t.reasons.homoglyph },
