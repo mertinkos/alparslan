@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures/extension";
 import { openPopup, navigateToSite, openOptionsPage } from "../helpers/extension-page";
+import { routeCommonSites } from "../helpers/site-routes";
 
 test.describe("Dashboard Score — Happy Path", () => {
   test("should show score with no browsing activity", async ({ context, extensionId }) => {
@@ -31,6 +32,7 @@ test.describe("Dashboard Score — Happy Path", () => {
   // dogrulaniyor (deterministic, scan-ayar bazli).
 
   test("should update score after browsing HTTPS sites", async ({ context, extensionId }) => {
+    await routeCommonSites(context);
     const page1 = await navigateToSite(context, "https://example.com");
     await page1.waitForTimeout(1000);
     await page1.close();
@@ -59,6 +61,7 @@ test.describe("Dashboard Score — Happy Path", () => {
 
 test.describe("Dashboard Score — Negative Scenarios", () => {
   test("negative: score should not exceed 100", async ({ context, extensionId }) => {
+    await routeCommonSites(context);
     for (let i = 0; i < 5; i++) {
       const page = await navigateToSite(context, "https://example.com");
       await page.waitForTimeout(300);
@@ -76,7 +79,10 @@ test.describe("Dashboard Score — Negative Scenarios", () => {
     await popup.close();
   });
 
-  test("negative: dashboard should handle extension disabled state", async ({ context, extensionId }) => {
+  test("negative: dashboard should handle extension disabled state", async ({
+    context,
+    extensionId,
+  }) => {
     const popup = await openPopup(context, extensionId);
     // "Aktif" toggle artik <button role="switch"> — aria-label uzerinden bulunur.
     // Bu butona basinca koruma kapanir; intro/onboarding overlay'i acilir
