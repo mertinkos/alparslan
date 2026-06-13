@@ -70,6 +70,7 @@ describe("canonicalizeUrl", () => {
     ["http://127.0.0.1/", "127.0.0.1"],
     ["http://10.0.0.5/", "10.0.0.5"],
     ["http://172.16.0.1/", "172.16.0.1"],
+    ["http://192.168.1.1/", "192.168.1.1"],
     ["http://169.254.10.20/", "169.254.10.20"],
   ])("detects private or local IPv4 ranges for %s", (url, hostname) => {
     const result = canonicalizeUrl(url);
