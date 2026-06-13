@@ -133,14 +133,12 @@ function isBreachDismissedForDomain(domain: string): Promise<boolean> {
   });
 }
 
+// @mertinkos review yorumu: content script'in chrome.storage.local'a
+// direkt yazmasi mimari acidan tehlikeli (injection riski). Yazma
+// background'a tasindi; content script artik DISMISS_BREACH_DOMAIN
+// mesajini gonderir, background validate edip yazar.
 function rememberBreachDismissal(domain: string): void {
-  chrome.storage.local.get([BREACH_DISMISSED_KEY], (result) => {
-    const list = (result[BREACH_DISMISSED_KEY] as string[] | undefined) || [];
-    if (!list.includes(domain)) {
-      list.push(domain);
-      chrome.storage.local.set({ [BREACH_DISMISSED_KEY]: list });
-    }
-  });
+  chrome.runtime.sendMessage({ type: "DISMISS_BREACH_DOMAIN", domain });
 }
 
 function createBreachInfoBanner(reason: string, domain: string): void {

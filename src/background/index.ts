@@ -562,6 +562,40 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    // Breach banner uyarisini bir domain icin susturma istegi. Eskiden
+    // content script (src/content/index.ts) chrome.storage.local'i direkt
+    // yaziyordu — content script web sayfasi context'inde calistigi icin
+    // injection riski tasiyordu. @mertinkos review yorumu uzerine yazim
+    // background'a tasindi: burada domain valide edilir, sonra yazilir.
+    // Content script artik sadece bu mesaji gonderir, kalici belege
+    // dokunamaz.
+    if (message.type === "DISMISS_BREACH_DOMAIN") {
+      const BREACH_DISMISSED_KEY = "alparslan-breach-dismissed-domains";
+      const rawDomain = message.domain;
+      // Sanitize: yalniz string + makul uzunluk + tehlikeli karakter yok.
+      // Hostname yapisi disindaki bir seyi storage'a kaydetmiyoruz.
+      if (typeof rawDomain !== "string" || rawDomain.length === 0 || rawDomain.length > 253) {
+        sendResponse({ ok: false, reason: "invalid_domain" });
+        return true;
+      }
+      if (!/^[a-z0-9.-]+$/i.test(rawDomain)) {
+        sendResponse({ ok: false, reason: "invalid_chars" });
+        return true;
+      }
+      chrome.storage.local.get([BREACH_DISMISSED_KEY], (result) => {
+        const list = (result[BREACH_DISMISSED_KEY] as string[] | undefined) || [];
+        if (!list.includes(rawDomain)) {
+          list.push(rawDomain);
+          chrome.storage.local.set({ [BREACH_DISMISSED_KEY]: list }, () => {
+            sendResponse({ ok: true });
+          });
+        } else {
+          sendResponse({ ok: true });
+        }
+      });
+      return true;
+    }
+
     // The popup short-circuits CHECK_URL for chrome:// and about: pages (we
     // can't actually analyze browser-internal pages), so without this they
     // never reach the history → the "Bilinmeyen" counter stayed at 0 even
