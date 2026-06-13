@@ -250,15 +250,17 @@ initServiceWorker().catch((err) => {
 // göstermek için kullanıcı talebi: kalıcı (1700+ Kontrol) sayılar yerine
 // Chrome her başlatıldığında sıfırdan saymaya başlasın.
 //
-// Two complementary triggers because `chrome.runtime.onStartup` is unreliable
-// for unpacked extensions and silently skipped when Chrome runs background
-// apps (Windows tray) so the user closes all windows but Chrome stays alive:
+// @mertinkos review yorumu: Eski yaklaşım `chrome.windows.onCreated` +
+// `windows.length === 1` race condition'a açıktı. İki pencere hızlıca
+// açılırsa length 2 gelip reset atlanabiliyordu; tray modunda gizli
+// bir pencere varsa length hep > 1 olup hiç tetiklenmiyordu.
 //
-//   1. `chrome.runtime.onStartup` — the official "Chrome launched" hook;
-//      fires once per profile start, ideal when it works.
-//   2. `chrome.windows.onCreated` + windows.length === 1 — fallback: when a
-//      new window is created and it's the ONLY window, the user effectively
-//      restarted Chrome from their perspective.
+// Yeni yaklaşım: Service worker MV3'te Chrome her açıldığında sıfırdan
+// başlar ve `chrome.storage.session` de Chrome kapanınca uçar. Bu ikisi
+// birbirinin "tazeliğini" doğrular — SW init sırasında session
+// storage'da `sessionStart` damgası yoksa demek ki bu Chrome'un
+// gerçekten taze açıldığı an. Damga varsa SW sadece uykudan uyandı,
+// sayaçlara dokunmuyoruz.
 //
 // Sadece SESSION sayaclarini (state.stats) sifirlar — taze gun, taze
 // "Engellenen Tehdit / Tarama" sayim. state.history (kullanicinin kalici
@@ -266,27 +268,47 @@ initServiceWorker().catch((err) => {
 // olurdu, kullanici uzun donemli geçmisini kaybederdi.
 // Popup'taki UNKNOWN sayimi history.filter ile hesaplaniyor — bu sayede
 // session reset olsa bile geçmis korunur, sayimlar dogru gösterilir.
+const SESSION_START_KEY = "alparslanSessionStart";
+
 function resetSessionCounters(reason: string): void {
   logger.debug(`Session reset: ${reason}`);
   state.stats = { ...DEFAULT_STATS };
   chrome.storage.sync.set({ stats: state.stats });
 }
 
-chrome.runtime.onStartup?.addListener?.(() => resetSessionCounters("onStartup"));
-
-// Optional-chain through to `.addListener` because vitest mocks of the
-// chrome.* surface only stub the bits the production code calls — without
-// this guard the test boot crashes with "Cannot read addListener of
-// undefined" before any assertions run.
-chrome.windows?.onCreated?.addListener?.(async () => {
-  try {
-    const windows = await chrome.windows.getAll();
-    if (windows.length === 1) {
-      resetSessionCounters("first window opened");
-    }
-  } catch {
-    /* windows API not available — fall back to onStartup */
+async function maybeStartNewChromeSession(): Promise<void> {
+  // chrome.storage.session olmayan ortamlarda (test mock'ları, eski
+  // Chrome sürümleri) sessizce çık — yanlış tetiklenip sayaçları
+  // bozmaktansa hiç yapmamak daha güvenli.
+  if (!chrome.storage?.session?.get || !chrome.storage?.session?.set) {
+    return;
   }
+  try {
+    const result = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.session.get(SESSION_START_KEY, (r) => resolve(r || {}));
+    });
+    if (result[SESSION_START_KEY]) {
+      // SW sadece uykudan uyandı; Chrome oturumu devam ediyor.
+      return;
+    }
+    // Damga yok → taze Chrome oturumu. Önce damgayı bas (race'leri kes),
+    // sonra sayaçları sıfırla.
+    await new Promise<void>((resolve) => {
+      chrome.storage.session.set({ [SESSION_START_KEY]: Date.now() }, () => resolve());
+    });
+    resetSessionCounters("fresh chrome session (no sessionStart stamp)");
+  } catch (err) {
+    logger.warn("Session start check failed:", err);
+  }
+}
+
+maybeStartNewChromeSession();
+
+// `chrome.runtime.onStartup` artık birincil mekanizma değil ama hâlâ
+// faydalı bir ek sinyal: bazı Chrome sürümlerinde SW init'ten daha
+// erken ateşlenir ve damga kontrolünü ikinci kez tetikler (idempotent).
+chrome.runtime.onStartup?.addListener?.(() => {
+  maybeStartNewChromeSession();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
