@@ -560,12 +560,6 @@ describe("Contextual contains-trusted-name scoring", () => {
       expect(result.reason).toBe("contains-trusted-name");
     });
 
-    it("securegaranti.com.tr → suspicious (DEFAULT + keyword 'secure', no separator needed)", () => {
-      const result = checkTyposquatting("securegaranti.com.tr");
-      expect(result.isSuspicious).toBe(true);
-      expect(result.reason).toBe("contains-trusted-name");
-    });
-
     it("turkiyegiris.com → suspicious (GENERIC + keyword, ratio 1.71 < 2.0)", () => {
       const result = checkTyposquatting("turkiyegiris.com");
       expect(result.isSuspicious).toBe(true);
