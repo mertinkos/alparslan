@@ -11,7 +11,7 @@ import { useExtensionSettings } from "./hooks/useExtensionSettings";
 import { useProtectedDays } from "./hooks/useProtectedDays";
 import { NotificationPanel } from "./components/NotificationPanel";
 import { SettingsTab } from "./components/SettingsTab";
-import { ConfirmModal } from "./components/ConfirmModal";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { DurumSkorCards } from "./components/DurumSkorCards";

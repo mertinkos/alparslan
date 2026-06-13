@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DEFAULT_SETTINGS, type ExtensionSettings } from "@/utils/types";
 import { normalizeWhitelistInput } from "@/utils/whitelist-normalize";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import t from "@/i18n/tr";
 
 type ProtectionLevel = ExtensionSettings["protectionLevel"];
@@ -438,39 +439,84 @@ export default function Options() {
       {/* Disable "Tehlike Uyarıları" confirmation — same dialog as the popup.
           Prominent green "keep protection" button, dim "disable" text link. */}
       {showDisableNotif && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
-          }}
+        <ConfirmModal
+          title={t.confirmDisableNotif.message}
+          body={t.confirmDisableNotif.detail}
         >
-          <div
+          <button
+            onClick={() => setShowDisableNotif(false)}
             style={{
-              background: "white",
-              borderRadius: 14,
-              padding: 20,
-              maxWidth: 380,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+              width: "100%",
+              padding: "11px 0",
+              background: "#16a34a",
+              border: "none",
+              borderRadius: 8,
+              color: "white",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              marginBottom: 10,
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
-              {t.confirmDisableNotif.message}
-            </div>
-            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5, marginBottom: 18 }}>
-              {t.confirmDisableNotif.detail}
-            </div>
+            {t.confirmDisableNotif.keep}
+          </button>
+          <button
+            onClick={() => {
+              saveSettings({ ...settings, showDomWarnings: false });
+              setShowDisableNotif(false);
+            }}
+            style={{
+              width: "100%",
+              padding: "6px 0",
+              background: "none",
+              border: "none",
+              color: "#9ca3af",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {t.confirmDisableNotif.disable}
+          </button>
+        </ConfirmModal>
+      )}
+
+      {/* Clear-all confirmation modal — destructive action gated behind an
+          explicit confirm. Neutral "cancel" + red "confirm" buttons. */}
+      {showClearConfirm && (
+        <ConfirmModal
+          title={t.confirmClearData.message}
+          body={t.confirmClearData.detail}
+        >
+          <div style={{ display: "flex", gap: 10 }}>
             <button
-              onClick={() => setShowDisableNotif(false)}
+              onClick={() => setShowClearConfirm(false)}
               style={{
-                width: "100%",
-                padding: "11px 0",
-                background: "#16a34a",
+                flex: 1,
+                padding: "10px 0",
+                background: "#f3f4f6",
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                color: "#374151",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {t.confirmClearData.cancel}
+            </button>
+            <button
+              onClick={() => {
+                handleClearData();
+                setShowClearConfirm(false);
+              }}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                background: "#dc2626",
                 border: "none",
                 borderRadius: 8,
                 color: "white",
@@ -478,105 +524,12 @@ export default function Options() {
                 fontWeight: 700,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                marginBottom: 10,
               }}
             >
-              {t.confirmDisableNotif.keep}
-            </button>
-            <button
-              onClick={() => {
-                saveSettings({ ...settings, showDomWarnings: false });
-                setShowDisableNotif(false);
-              }}
-              style={{
-                width: "100%",
-                padding: "6px 0",
-                background: "none",
-                border: "none",
-                color: "#9ca3af",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {t.confirmDisableNotif.disable}
+              {t.confirmClearData.confirm}
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Clear-all confirmation modal — destructive action gated behind an
-          explicit confirm. Neutral "cancel" + red "confirm" buttons. */}
-      {showClearConfirm && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: 14,
-              padding: 20,
-              maxWidth: 380,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-            }}
-          >
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
-              {t.confirmClearData.message}
-            </div>
-            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5, marginBottom: 18 }}>
-              {t.confirmClearData.detail}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                style={{
-                  flex: 1,
-                  padding: "10px 0",
-                  background: "#f3f4f6",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  color: "#374151",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t.confirmClearData.cancel}
-              </button>
-              <button
-                onClick={() => {
-                  handleClearData();
-                  setShowClearConfirm(false);
-                }}
-                style={{
-                  flex: 1,
-                  padding: "10px 0",
-                  background: "#dc2626",
-                  border: "none",
-                  borderRadius: 8,
-                  color: "white",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t.confirmClearData.confirm}
-              </button>
-            </div>
-          </div>
-        </div>
+        </ConfirmModal>
       )}
     </div>
   );
