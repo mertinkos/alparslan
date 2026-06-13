@@ -29,7 +29,10 @@ export async function sendRuntimeMessage<T>(
   return page.evaluate(
     (msg) =>
       new Promise<T>((resolve) => {
-        chrome.runtime.sendMessage(msg, (response: T) => resolve(response));
+        chrome.runtime.sendMessage(msg, (response: T) => {
+          if (chrome.runtime.lastError) return;
+          resolve(response);
+        });
       }),
     message,
   );
