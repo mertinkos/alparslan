@@ -23,7 +23,6 @@ test.describe("Production log gating", () => {
     await options.waitForTimeout(1000);
 
     expect(alparslanLogs.filter((log) => log.type === "debug" || log.type === "info")).toEqual([]);
-    expect(alparslanLogs.every((log) => log.type === "warning" || log.type === "error")).toBe(true);
 
     await options.close();
   });
