@@ -5,13 +5,16 @@ import DashboardTab from "@/popup/DashboardTab";
 import t from "@/i18n/tr";
 
 describe("DashboardTab", () => {
-  // Yeni model: skor backend'in dashboard.score'undan DEGIL, insightCounts'tan
-  // hesaplaniyor. Test mock'unda bu sayilari geciyoruz ki popup ayni formulu
-  // kullanip beklenen sonucu uretsin.
-  // 0 tehdit + 1 risk + 0 safe + scan acik = 100 - 5 = 95
+  // Skor backend'in dashboard.score'undan DEGIL, insightCounts'tan hesaplanir.
+  // Reward sistemi sonrasi formul:
+  //   100 − tehdit×10 − risk×5 − (ayar kapali?10:0) + safe×1
+  //   + (tehdit yoksa +10) + (risk yoksa +5)
+  // Mock: 0 tehdit + 1 risk + 0 safe + scan acik
+  //   = 100 − 0 − 5 − 0 + 0 + 10 (tehdit yok ödülü) + 0 (risk var)
+  //   = 105, tavan 100
   const mockDashboard = {
-    score: 95,
-    breakdown: { httpsScore: 0, threatAvoidanceScore: 95, activityScore: 0, trackerScore: 0 },
+    score: 100,
+    breakdown: { httpsScore: 0, threatAvoidanceScore: 100, activityScore: 0, trackerScore: 0 },
     currentWeek: { urlsChecked: 50, httpsCount: 45, httpCount: 5, threatsBlocked: 0, trackersBlocked: 0, dangerousSitesVisited: 0, suspiciousSitesVisited: 0, unknownSitesVisited: 1, weekStart: Date.now() },
     previousWeek: null,
     tips: [t.tips.notActive],
@@ -48,9 +51,10 @@ describe("DashboardTab", () => {
 
   it("renders the computed score value", async () => {
     render(<DashboardTab />);
-    // 100 - 1*5 = 95. useCountUp animates 0→95 over 300ms; nihai deger 95.
+    // Reward sistemi: 0 tehdit (+10 ödül) − 1 risk (5 ceza) = +5 → 105 → cap 100.
+    // useCountUp animates 0→100 over 300ms; nihai deger 100.
     await waitFor(() => {
-      expect(screen.getByText("95")).toBeDefined();
+      expect(screen.getByText("100")).toBeDefined();
     }, { timeout: 1000 });
   });
 
@@ -62,7 +66,7 @@ describe("DashboardTab", () => {
   });
 
   it("renders the status message under the ring", async () => {
-    // Score 95 (>= 80) → "safe" tier message.
+    // Score 100 (>= 80) → "safe" tier message.
     render(<DashboardTab />);
     await waitFor(() => {
       expect(screen.getByText(t.scoreRing.safeTitle)).toBeDefined();

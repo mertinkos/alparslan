@@ -357,6 +357,11 @@ const PRIVILEGED_MESSAGE_TYPES = new Set([
   "ADD_TO_WHITELIST",
   "REMOVE_FROM_WHITELIST",
   "CLEAR_HISTORY",
+  // RESET_SCORE: stats + history + weeklyMetrics tamamen sifirlar. Bir
+  // sitenin content script'i chrome.runtime.sendMessage ile cagirsa
+  // kullanicinin tum skor verisini disardan silebiliyordu — guvenlik
+  // acigi. Yalniz extension-own pages (popup, options) cagirabilir.
+  "RESET_SCORE",
 ]);
 
 function isFromExtensionPage(sender: chrome.runtime.MessageSender): boolean {
