@@ -89,8 +89,36 @@ describe("canonicalizeUrl", () => {
     expect(result.parseError).toBeDefined();
   });
 
-  it("keeps Public Suffix List fields ready for the next phase", () => {
+  it("computes registrable domain, public suffix, and subdomain for Turkish domains", () => {
     const result = canonicalizeUrl("https://login.akbank.com.tr/");
+
+    expect(result.registrableDomain).toBe("akbank.com.tr");
+    expect(result.publicSuffix).toBe("com.tr");
+    expect(result.subdomain).toBe("login");
+  });
+
+  it("computes registrable domain for multi-label public suffixes", () => {
+    const result = canonicalizeUrl("https://sub.example.co.uk/");
+
+    expect(result.registrableDomain).toBe("example.co.uk");
+    expect(result.publicSuffix).toBe("co.uk");
+    expect(result.subdomain).toBe("sub");
+  });
+
+  it.each([
+    ["https://foo.github.io/", "foo.github.io", "github.io"],
+    ["https://foo.pages.dev/", "foo.pages.dev", "pages.dev"],
+    ["https://foo.blogspot.com/", "foo.blogspot.com", "blogspot.com"],
+  ])("treats private suffixes as public suffix boundaries for %s", (url, domain, suffix) => {
+    const result = canonicalizeUrl(url);
+
+    expect(result.registrableDomain).toBe(domain);
+    expect(result.publicSuffix).toBe(suffix);
+    expect(result.subdomain).toBeNull();
+  });
+
+  it("keeps Public Suffix List fields null for IP addresses", () => {
+    const result = canonicalizeUrl("http://127.0.0.1/");
 
     expect(result.registrableDomain).toBeNull();
     expect(result.publicSuffix).toBeNull();

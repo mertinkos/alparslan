@@ -1,3 +1,5 @@
+import { parse as parseTld } from "tldts";
+
 export type UrlScheme = "http" | "https" | "other";
 
 export interface CanonicalUrl {
@@ -90,6 +92,37 @@ function normalizeHref(parsed: URL, normalizedHostname: string | null): string {
   return normalized.href;
 }
 
+function getDomainParts(hostname: string | null, isIpAddress: boolean): Pick<
+  CanonicalUrl,
+  "registrableDomain" | "publicSuffix" | "subdomain"
+> {
+  if (!hostname || isIpAddress) {
+    return { registrableDomain: null, publicSuffix: null, subdomain: null };
+  }
+
+  const parsedDomain = parseTld(hostname, {
+    allowPrivateDomains: true,
+    extractHostname: false,
+  });
+
+  return {
+    registrableDomain: parsedDomain.domain ?? null,
+    publicSuffix: parsedDomain.publicSuffix ?? null,
+    subdomain: parsedDomain.subdomain || null,
+  };
+}
+
+export function isPublicSuffixHostname(hostname: string): boolean {
+  const canonical = canonicalizeUrl(`https://${hostname}`);
+
+  return (
+    canonical.parseError === undefined &&
+    canonical.hostname !== null &&
+    canonical.publicSuffix === canonical.hostname &&
+    canonical.registrableDomain === null
+  );
+}
+
 export function canonicalizeUrl(rawUrl: string): CanonicalUrl {
   let parsed: URL;
 
@@ -104,6 +137,7 @@ export function canonicalizeUrl(rawUrl: string): CanonicalUrl {
   const hostname = rawHostname ? stripTrailingDots(rawHostname) : null;
   const ipv4 = hostname ? parseIpv4(hostname) : null;
   const isIpAddress = ipv4 !== null;
+  const domainParts = getDomainParts(hostname, isIpAddress);
 
   return {
     originalUrl: rawUrl,
@@ -112,9 +146,9 @@ export function canonicalizeUrl(rawUrl: string): CanonicalUrl {
     hostname,
     asciiHostname: hostname,
     unicodeHostname: hostname,
-    registrableDomain: null,
-    publicSuffix: null,
-    subdomain: null,
+    registrableDomain: domainParts.registrableDomain,
+    publicSuffix: domainParts.publicSuffix,
+    subdomain: domainParts.subdomain,
     path: parsed.pathname,
     port: parsed.port || null,
     isIpAddress,
