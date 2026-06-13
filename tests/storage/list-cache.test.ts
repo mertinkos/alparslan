@@ -71,6 +71,20 @@ describe("isWhitelisted", () => {
   it("is case-insensitive", () => {
     expect(isWhitelisted("EXAMPLE.COM")).toBe(true);
   });
+
+  it("matches subdomains under private-suffix registrable domains only", async () => {
+    await addToWhitelist("foo.github.io");
+
+    expect(isWhitelisted("bar.foo.github.io")).toBe(true);
+    expect(isWhitelisted("evil.github.io")).toBe(false);
+  });
+
+  it("ignores public suffix whitelist entries", async () => {
+    await addToWhitelist("github.io");
+
+    expect(isWhitelisted("evil.github.io")).toBe(false);
+    expect(getWhitelistDomains()).not.toContain("github.io");
+  });
 });
 
 describe("isBlacklisted", () => {
