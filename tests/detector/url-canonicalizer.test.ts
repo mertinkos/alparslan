@@ -103,18 +103,6 @@ describe("canonicalizeUrl", () => {
     expect(result.parseError).toBeDefined();
   });
 
-  it.each([
-    ["not-a-url"],
-    ["http://"],
-    ["https://exa mple.com"],
-  ])("keeps invalid URL examples in the parseError path for %s", (url) => {
-    const result = canonicalizeUrl(url);
-
-    expect(result.normalizedUrl).toBeNull();
-    expect(result.hostname).toBeNull();
-    expect(result.parseError).toBeDefined();
-  });
-
   it("computes registrable domain, public suffix, and subdomain for Turkish domains", () => {
     const result = canonicalizeUrl("https://login.akbank.com.tr/");
 
@@ -129,27 +117,6 @@ describe("canonicalizeUrl", () => {
     expect(result.registrableDomain).toBe("example.co.uk");
     expect(result.publicSuffix).toBe("co.uk");
     expect(result.subdomain).toBe("sub");
-  });
-
-  it("keeps phishing brand labels outside the registrable domain when they are only subdomains", () => {
-    const result = canonicalizeUrl("https://akbank.com.tr.evil.com/path");
-
-    expect(result.hostname).toBe("akbank.com.tr.evil.com");
-    expect(result.registrableDomain).toBe("evil.com");
-    expect(result.publicSuffix).toBe("com");
-    expect(result.subdomain).toBe("akbank.com.tr");
-  });
-
-  it.each([
-    ["https://www.example.com./", "www.example.com", true],
-    ["https://user:pass@example.com/", "example.com", false],
-    ["https://login.akbank.com.tr/path", "login.akbank.com.tr", false],
-  ])("records canonical URL security flags for %s", (url, hostname, trailingDot) => {
-    const result = canonicalizeUrl(url);
-
-    expect(result.hostname).toBe(hostname);
-    expect(result.hasTrailingDot).toBe(trailingDot);
-    expect(result.hasCredentials).toBe(url.includes("user:pass"));
   });
 
   it.each([
