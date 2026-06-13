@@ -1,18 +1,35 @@
 import { useState, useEffect, useCallback } from "react";
-import { type ThreatResult, type ExtensionStats, type ExtensionSettings, type ScanHistoryEntry, HISTORY_DISPLAY_LIMIT } from "@/utils/types";
+import { type ThreatResult, type ExtensionStats, type ExtensionSettings } from "@/utils/types";
 import TabBar, { type TabId } from "./TabBar";
 import DashboardTab from "./DashboardTab";
 import BreachBadge from "./BreachBadge";
+import { normalizeQuickWhitelistDomain, isDomainInWhitelist } from "./whitelist-helpers";
+import { useInitProgress } from "./hooks/useInitProgress";
+import { useExtensionEnabled } from "./hooks/useExtensionEnabled";
+import { useScanHistory } from "./hooks/useScanHistory";
+import { useExtensionSettings } from "./hooks/useExtensionSettings";
+import { useProtectedDays } from "./hooks/useProtectedDays";
+import { NotificationPanel } from "./components/NotificationPanel";
+import { SettingsTab } from "./components/SettingsTab";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
+import { DurumSkorCards } from "./components/DurumSkorCards";
+import { StatusPanel } from "./components/StatusPanel";
 import t from "@/i18n/tr";
 
-type SecurityStatus = "safe" | "dangerous" | "suspicious" | "unknown" | "loading" | "disabled";
+export type SecurityStatus = "safe" | "dangerous" | "suspicious" | "unknown" | "loading" | "disabled";
 
+// Status panel theme tokens. The `bg` field is a translucent rgba so it
+// works as a subtle wash on both light and dark surfaces — the previous
+// solid pastels (#f0fdf4 etc.) looked great on white but turned into a
+// blown-out fog patch over the dark popup background.
 const STATUS_CONFIG: Record<Exclude<SecurityStatus, "loading">, { label: string; color: string; bg: string }> = {
-  safe: { label: t.status.safe, color: "#16a34a", bg: "#f0fdf4" },
-  dangerous: { label: t.status.dangerous, color: "#dc2626", bg: "#fef2f2" },
-  suspicious: { label: t.status.suspicious, color: "#d97706", bg: "#fffbeb" },
-  unknown: { label: t.status.unknown, color: "#6b7280", bg: "#f9fafb" },
-  disabled: { label: t.status.disabled, color: "#9ca3af", bg: "#f3f4f6" },
+  safe: { label: t.status.safe, color: "#16a34a", bg: "rgba(22, 163, 74, 0.10)" },
+  dangerous: { label: t.status.dangerous, color: "#dc2626", bg: "rgba(220, 38, 38, 0.10)" },
+  suspicious: { label: t.status.suspicious, color: "#d97706", bg: "rgba(217, 119, 6, 0.10)" },
+  unknown: { label: t.status.unknown, color: "var(--text-muted)", bg: "rgba(107, 114, 128, 0.10)" },
+  disabled: { label: t.status.disabled, color: "#9ca3af", bg: "rgba(156, 163, 175, 0.10)" },
 };
 
 const STATUS_ICONS: Record<Exclude<SecurityStatus, "loading">, string> = {
@@ -23,105 +40,53 @@ const STATUS_ICONS: Record<Exclude<SecurityStatus, "loading">, string> = {
   disabled: "\u23F8\uFE0F",
 };
 
-interface InitStatus {
-  ready: boolean;
-  step: string;
-  percent: number;
-  steps: { name: string; done: boolean; ms?: number }[];
-}
+// InitStatus interface'i ve init polling mantigi src/popup/hooks/useInitProgress.ts
+// dosyasina tasindi. Bu sayede App.tsx 1300+ satirdan biraz nefes alir, SW
+// polling'i backoff'la 300ms-sabit'ten 300ms→5s'e bandinda evrimli hale gelir.
+
+// narrateReason() src/popup/narrateReason.ts'e tasindi.
 
 export default function App() {
-  const [initStatus, setInitStatus] = useState<InitStatus | null>(null);
+  // Init durumu artik useInitProgress hook'unda — backoff'lu polling,
+  // session marker okuma, cleanup. Component sadece 2 deger okuyor.
+  const { initStatus, initDoneSession } = useInitProgress();
   const [url, setUrl] = useState<string>("");
   const [status, setStatus] = useState<SecurityStatus>("loading");
-  const [enabled, setEnabled] = useState<boolean>(true);
+  // Enabled toggle + storage senkron mantigi useExtensionEnabled hook'unda.
+  const { enabled, toggleEnabled } = useExtensionEnabled();
   const [reasons, setReasons] = useState<string[]>([]);
-  const [score, setScore] = useState<number>(0);
   const [stats, setStats] = useState<ExtensionStats>({ urlsChecked: 0, threatsBlocked: 0, trackersBlocked: 0 });
-  const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
+  // Tarama gecmisi (history) yukleme + reaktif senkron mantigi
+  // useScanHistory hook'unda. clearLocalHistory hook ustunden gelir.
+  const { history } = useScanHistory();
   const [pageReasons, setPageReasons] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("status");
-  const [settings, setSettings] = useState<ExtensionSettings | null>(null);
-  const [tabStats, setTabStats] = useState<{
-    requestsChecked: number;
-    threatsDetected: number;
-    requestsBlocked: number;
-    domains: string[];
-    threats: Array<{ domain: string; level: string; timestamp: number }>;
-  } | null>(null);
-  const [listStats, setListStats] = useState<{
-    blacklistSize: number;
-    whitelistSize: number;
-  } | null>(null);
-  const [debugInfo, setDebugInfo] = useState<{
-    initTimings: Record<string, number>;
-    blacklistSize: number;
-    uptime: number;
-  } | null>(null);
+  // Settings yukleme + reaktif senkron useExtensionSettings hook'una tasindi.
+  const { settings, setSettings, saveSettings } = useExtensionSettings();
+  const [isWhitelisted, setIsWhitelisted] = useState<boolean>(false);
+  const [notificationsOpen, setNotificationsOpen] = useState<boolean>(false);
+  const [infoOpen, setInfoOpen] = useState<boolean>(false);
+  // Koruma süresi hesabi (gun) useProtectedDays hook'unda.
+  const protectedDays = useProtectedDays();
+  const [popupWhitelistInput, setPopupWhitelistInput] = useState<string>("");
+  const [showDisableConfirm, setShowDisableConfirm] = useState<boolean>(false);
+  // Speech-bubble action confirmation gates — both verdicts run through a
+  // modal so neither path (close-tab or whitelist-domain) fires on a stray
+  // click.
+  const [showCloseConfirm, setShowCloseConfirm] = useState<boolean>(false);
+  const [showTrustConfirm, setShowTrustConfirm] = useState<boolean>(false);
+  // Durum sekmesindeki Skor-style kart hangi kategori acik (null = hicbiri).
+  const [durumSkorFilter, setDurumSkorFilter] = useState<"control" | "threat" | "unknown" | null>(null);
+  const handleDurumSkorClick = (filter: "control" | "threat" | "unknown") => {
+    setDurumSkorFilter((prev) => (prev === filter ? null : filter));
+  };
 
-  const saveSettings = useCallback((updated: ExtensionSettings) => {
-    setSettings(updated);
-    chrome.storage.sync.set({ settings: updated }, () => {
-      chrome.runtime.sendMessage({ type: "SETTINGS_UPDATED", settings: updated });
-    });
-  }, []);
+  // saveSettings useExtensionSettings hook'una tasindi.
 
-  // Poll init status until ready
+  // Fetch popup stats — re-runs when init becomes ready.
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    function checkInit(): void {
-      chrome.runtime.sendMessage({ type: "GET_INIT_STATUS" }, (response: InitStatus | null) => {
-        if (response) {
-          setInitStatus(response);
-          if (response.ready && timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-        }
-      });
-    }
-
-    checkInit();
-    timer = setInterval(checkInit, 300);
-    return () => { if (timer) clearInterval(timer); };
-  }, []);
-
-  // Fetch all popup data — re-runs when init becomes ready
-  useEffect(() => {
-    // Restore persisted enabled state so the toggle reflects reality
-    // after closing and reopening the popup.
-    chrome.storage.sync.get("enabled", (result) => {
-      if (typeof result.enabled === "boolean") setEnabled(result.enabled);
-    });
-
     chrome.runtime.sendMessage({ type: "GET_STATS" }, (response: { stats: ExtensionStats } | null) => {
       if (response?.stats) setStats(response.stats);
-    });
-    chrome.runtime.sendMessage({ type: "GET_SETTINGS" }, (response: { settings: ExtensionSettings } | null) => {
-      if (response?.settings) setSettings(response.settings);
-    });
-    chrome.runtime.sendMessage({ type: "GET_DEBUG_INFO" }, (response: unknown) => {
-      const r = response as { initTimings?: Record<string, number>; blacklistSize?: number; uptime?: number } | null;
-      if (r?.initTimings) setDebugInfo({ initTimings: r.initTimings, blacklistSize: r.blacklistSize ?? 0, uptime: r.uptime ?? 0 });
-    });
-
-    // Get per-tab network stats for the current tab
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
-      if (tabId) {
-        chrome.runtime.sendMessage({ type: "GET_LIST_STATS", tabId }, (response: unknown) => {
-          const r = response as {
-            blacklistSize?: number; whitelistSize?: number; dynamicWhitelistSize?: number;
-            tab?: { requestsChecked: number; threatsDetected: number; requestsBlocked: number; domains: string[]; threats: Array<{ domain: string; level: string; timestamp: number }> };
-          } | null;
-          if (r) {
-            setListStats({ blacklistSize: r.blacklistSize ?? 0, whitelistSize: (r.whitelistSize ?? 0) + (r.dynamicWhitelistSize ?? 0) });
-            if (r.tab) setTabStats(r.tab);
-          }
-        });
-      }
     });
   }, [initStatus?.ready]);
 
@@ -137,6 +102,13 @@ export default function App() {
 
       if (!currentUrl || currentUrl.startsWith("chrome://") || currentUrl.startsWith("about:")) {
         setStatus("unknown");
+        // Tell the background to record this as a "Bilinmeyen" visit so the
+        // counter on the stats row matches the status displayed above it.
+        // (Background dedupes against the most recent entry to avoid spam
+        // when the popup is reopened on the same internal page.)
+        if (currentUrl) {
+          chrome.runtime.sendMessage({ type: "RECORD_UNKNOWN_VIEW", url: currentUrl });
+        }
         return;
       }
 
@@ -149,7 +121,7 @@ export default function App() {
           }
           setStatus(response.level.toLowerCase() as SecurityStatus);
           setReasons(response.reasons || []);
-          setScore(response.score || 0);
+          setIsWhitelisted((response.reasons || []).includes(t.reasons.whitelisted));
         },
       );
 
@@ -168,31 +140,123 @@ export default function App() {
     });
   }, [enabled, initStatus?.ready]);
 
-  const handleToggle = (newEnabled: boolean) => {
-    setEnabled(newEnabled);
-    chrome.runtime.sendMessage({ type: "SET_ENABLED", enabled: newEnabled });
-  };
+  // handleToggle artik useExtensionEnabled hook'unun expose ettigi
+  // toggleEnabled fonksiyonu — alias olarak tutuldu ki diger butonlar
+  // ayni isim uzerinden cagirabilsin.
+  const handleToggle = toggleEnabled;
 
-  const loadHistory = () => {
-    chrome.runtime.sendMessage({ type: "GET_HISTORY" }, (response: { history: ScanHistoryEntry[] } | null) => {
-      if (response?.history) setHistory(response.history);
+  // History yukleme + reaktif senkron useScanHistory hook'una tasindi.
+
+  // Koruma süresi hesabi useProtectedDays hook'una tasindi.
+
+  // Authoritative whitelist check: read settings.whitelist from sync storage
+  // and re-check whenever the underlying storage changes (e.g. user added/
+  // removed a domain from the options page while popup is open).
+  const checkWhitelistMembership = useCallback(() => {
+    const domain = normalizeQuickWhitelistDomain(
+      (() => {
+        try { return new URL(url).hostname; } catch { return ""; }
+      })(),
+    );
+    if (!domain) {
+      setIsWhitelisted(false);
+      return;
+    }
+    chrome.storage.sync.get(["settings"], (result) => {
+      const settings = result.settings || {};
+      const whitelist: string[] = settings.whitelist || [];
+      setIsWhitelisted(isDomainInWhitelist(domain, whitelist));
+    });
+  }, [url]);
+
+  useEffect(() => {
+    checkWhitelistMembership();
+    const onChanged = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (areaName !== "sync") return;
+      // "enabled" + "settings.enabled" senkronu useExtensionEnabled hook'una
+      // tasindi. Burada sadece whitelist uyeligi degisirse yeniden kontrol
+      // ediyoruz.
+      if ("settings" in changes) {
+        checkWhitelistMembership();
+      }
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [checkWhitelistMembership]);
+
+  // handleToggleHistory / handleStatClick / handleClearHistory eski "Tarama
+  // Geçmişi" panelinin handler'lariydi; bu panel Skor sekmesindeki
+  // SkorCountButton + SkorFilteredList yapısıyla degistirildi, eski
+  // handler'lara artik referans yok, silindi.
+
+  // Closes the active tab from the in-bubble "Sayfayı Kapat" rescue button —
+  // used in the suspicious/dangerous/unknown speech-bubble action row.
+  const handleClosePage = () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const id = tabs[0]?.id;
+      if (typeof id === "number") chrome.tabs.remove(id);
     });
   };
 
-  const handleToggleHistory = () => {
-    if (!showHistory) loadHistory();
-    setShowHistory(!showHistory);
+  const handleAddToWhitelist = () => {
+    const domain = normalizeQuickWhitelistDomain(displayDomain);
+    if (!domain || domain === "—") return;
+    chrome.storage.sync.get(["settings"], (result) => {
+      const current: ExtensionSettings = result.settings || {};
+      const list: string[] = current.whitelist || [];
+      if (list.includes(domain)) {
+        setIsWhitelisted(true);
+        return;
+      }
+      const updated: ExtensionSettings = { ...current, whitelist: [...list, domain] };
+      chrome.storage.sync.set({ settings: updated }, () => {
+        setIsWhitelisted(true);
+        // Update IDB-backed cache used by CHECK_URL.
+        chrome.runtime.sendMessage({ type: "ADD_TO_WHITELIST", domain });
+        // Propagate settings change so background re-applies (and other
+        // popups/options pages refresh their state).
+        chrome.runtime.sendMessage({ type: "SETTINGS_UPDATED", settings: updated });
+      });
+    });
   };
 
-  const handleClearHistory = () => {
-    chrome.runtime.sendMessage({ type: "CLEAR_HISTORY" }, () => {
-      setHistory([]);
+  const handleViewWhitelist = () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("whitelist.html") });
+  };
+
+  const handleAddWhitelistEntry = () => {
+    const domain = normalizeQuickWhitelistDomain(popupWhitelistInput);
+    if (!domain) return;
+    chrome.storage.sync.get(["settings"], (result) => {
+      const current: ExtensionSettings = result.settings || {};
+      const list: string[] = current.whitelist || [];
+      if (list.includes(domain)) {
+        setPopupWhitelistInput("");
+        return;
+      }
+      const updated: ExtensionSettings = { ...current, whitelist: [...list, domain] };
+      chrome.storage.sync.set({ settings: updated }, () => {
+        setPopupWhitelistInput("");
+        // Local state mirror so the count badge + any other settings-derived
+        // UI (e.g. whitelist length checks) reflect the change instantly
+        // instead of waiting for the storage.onChanged round-trip.
+        setSettings((prev) => prev ? { ...prev, whitelist: updated.whitelist } : updated);
+        chrome.runtime.sendMessage({ type: "ADD_TO_WHITELIST", domain });
+        chrome.runtime.sendMessage({ type: "SETTINGS_UPDATED", settings: updated });
+      });
     });
   };
 
 
-  const config = status === "loading" ? null : STATUS_CONFIG[status];
-  const icon = status === "loading" ? "" : STATUS_ICONS[status];
+  // When the user just whitelisted the current site we want the status panel
+  // to flip to "Güvenli" immediately (matches the legacy bundled popup), even
+  // though the next CHECK_URL is still in flight. Once that response lands,
+  // `status` will already be "safe" so the override becomes a no-op.
+  const displayStatus = isWhitelisted && status !== "loading" ? "safe" : status;
+  const config = displayStatus === "loading" ? null : STATUS_CONFIG[displayStatus];
   const displayDomain = (() => {
     try {
       return new URL(url).hostname;
@@ -201,20 +265,34 @@ export default function App() {
     }
   })();
 
-  // Loading screen while lists are being loaded
-  if (initStatus && !initStatus.ready) {
+  // Loading screen while lists are being loaded — but ONLY on the first cold
+  // start of the Chrome session. `initDoneSession === false` means the bar
+  // hasn't run yet this session; `null` (still reading the flag) or `true`
+  // both suppress it so silent worker restarts don't flash the bar again.
+  if (initDoneSession === false && initStatus && !initStatus.ready) {
     return (
       <div style={{ width: 340, fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 14 }}>
-        <div style={{ padding: "12px 16px", background: "#1e293b", color: "white", display: "flex", alignItems: "center", gap: 8 }}>
-          <img src="/icons/icon-48.png" alt="Alparslan" style={{ width: 24, height: 24 }} />
-          <span style={{ fontWeight: 700, fontSize: 16 }}>Alparslan</span>
+        <div
+          style={{
+            padding: "12px 16px",
+            background: "linear-gradient(135deg, var(--accent-navy), var(--accent-navy-deep))",
+            borderBottom: "2px solid var(--accent-info-bright)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+            color: "#f8fafc",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <img src="/icons/alparslan_logo.svg" alt="Alparslan" style={{ width: 36, height: 36, borderRadius: 6 }} />
+          <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: 0.3, color: "#f8fafc" }}>Alparslan</span>
         </div>
         <div style={{ padding: "32px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>
             {initStatus.step}
           </div>
           {/* Progress bar */}
-          <div style={{ height: 6, borderRadius: 3, background: "#e5e7eb", overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ height: 6, borderRadius: 3, background: "var(--ring-track)", overflow: "hidden", marginBottom: 12 }}>
             <div
               style={{
                 height: "100%",
@@ -247,364 +325,248 @@ export default function App() {
 
   return (
     <div style={{ width: 340, fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 14 }}>
-      {/* Header */}
-      <div
-        style={{
-          padding: "12px 16px",
-          background: "#1e293b",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img src="/icons/icon-48.png" alt="Alparslan" style={{ width: 24, height: 24 }} />
-          <span style={{ fontWeight: 700, fontSize: 16 }}>Alparslan</span>
-        </div>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          <span>{enabled ? t.active : t.passive}</span>
-          <div
-            onClick={() => handleToggle(!enabled)}
-            style={{
-              width: 36,
-              height: 20,
-              borderRadius: 10,
-              background: enabled ? "#22c55e" : "#4b5563",
-              position: "relative",
-              transition: "background 0.2s",
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                background: "white",
-                position: "absolute",
-                top: 2,
-                left: enabled ? 18 : 2,
-                transition: "left 0.2s",
-              }}
-            />
-          </div>
-        </label>
-      </div>
+      {/* Header components/Header.tsx'e tasindi */}
+      <Header
+        enabled={enabled}
+        onToggleEnabled={handleToggle}
+        notificationsOpen={notificationsOpen}
+        onToggleNotifications={() => setNotificationsOpen(!notificationsOpen)}
+      />
 
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      {notificationsOpen && (
+        <NotificationPanel
+          infoOpen={infoOpen}
+          setInfoOpen={setInfoOpen}
+          stats={stats}
+          unknownCount={history.filter((h) => h.level === "UNKNOWN").length}
+          protectedDays={protectedDays}
+        />
+      )}
 
+      {!notificationsOpen && <TabBar activeTab={activeTab} onTabChange={setActiveTab} />}
+
+      {!notificationsOpen && (
+      <>
       {activeTab === "dashboard" ? (
         <DashboardTab />
       ) : activeTab === "settings" ? (
-        <div style={{ padding: "12px 16px" }}>
-          {settings && (
-            <>
-              {/* Network Monitoring Toggle */}
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{t.settings.networkMonitoring}</div>
-                    <div style={{ fontSize: 11, color: "#6b7280" }}>{t.settings.networkMonitoringDesc}</div>
-                  </div>
-                  <div
-                    onClick={() => {
-                      const updated = { ...settings, networkMonitoringEnabled: !settings.networkMonitoringEnabled };
-                      if (!updated.networkMonitoringEnabled) updated.networkBlockingEnabled = false;
-                      saveSettings(updated);
-                    }}
-                    style={{ width: 36, height: 20, borderRadius: 10, background: settings.networkMonitoringEnabled ? "#22c55e" : "#d1d5db", position: "relative", cursor: "pointer" }}
-                  >
-                    <div style={{ width: 16, height: 16, borderRadius: 8, background: "white", position: "absolute", top: 2, left: settings.networkMonitoringEnabled ? 18 : 2, transition: "left 0.2s" }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* DOM Warning Toggle */}
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{t.settings.domWarnings}</div>
-                    <div style={{ fontSize: 11, color: "#6b7280" }}>{t.settings.domWarningsDesc}</div>
-                  </div>
-                  <div
-                    onClick={() => saveSettings({ ...settings, showDomWarnings: !settings.showDomWarnings })}
-                    style={{ width: 36, height: 20, borderRadius: 10, background: settings.showDomWarnings !== false ? "#22c55e" : "#d1d5db", position: "relative", cursor: "pointer" }}
-                  >
-                    <div style={{ width: 16, height: 16, borderRadius: 8, background: "white", position: "absolute", top: 2, left: (settings.showDomWarnings !== false) ? 18 : 2, transition: "left 0.2s" }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* List Stats */}
-              {listStats && (
-                <div style={{ padding: "8px 0", borderTop: "1px solid #e5e7eb", fontSize: 12, color: "#6b7280" }}>
-                  <div>{t.settings.blacklistCount(listStats.blacklistSize)}</div>
-                  <div>{t.settings.whitelistCount(listStats.whitelistSize)}</div>
-                </div>
-              )}
-
-              {/* Link to full options */}
-              <button
-                onClick={() => chrome.runtime.openOptionsPage()}
-                style={{ width: "100%", padding: "8px 0", background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, color: "#374151", fontFamily: "inherit", marginTop: 4 }}
-              >
-                {t.settings.allSettings}
-              </button>
-            </>
-          )}
-        </div>
+        settings ? (
+          <SettingsTab
+            settings={settings}
+            saveSettings={saveSettings}
+            setShowDisableConfirm={setShowDisableConfirm}
+            displayDomain={displayDomain}
+            displayStatus={displayStatus}
+            popupWhitelistInput={popupWhitelistInput}
+            setPopupWhitelistInput={setPopupWhitelistInput}
+            handleAddWhitelistEntry={handleAddWhitelistEntry}
+            handleViewWhitelist={handleViewWhitelist}
+          />
+        ) : null
       ) : (
       <>
-      {/* Status */}
-      <div
-        style={{
-          padding: 16,
-          background: config?.bg || "#f9fafb",
-          borderBottom: `3px solid ${config?.color || "#e5e7eb"}`,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <span style={{ fontSize: 28 }}>{status === "loading" ? "\u23F3" : icon}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: config?.color || "#374151" }}>
-              {status === "loading" ? t.status.checking : config?.label}
-            </div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{displayDomain}</div>
-          </div>
-        </div>
-
-        {score > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div
-              style={{
-                height: 4,
-                borderRadius: 2,
-                background: "#e5e7eb",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${Math.min(score, 100)}%`,
-                  background: config?.color || "#6b7280",
-                  borderRadius: 2,
-                  transition: "width 0.3s",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
-              {t.dashboard.threat} skoru: {score}/100
-            </div>
-          </div>
-        )}
-
-        {(reasons.length > 0 || pageReasons.length > 0) && (
-          <div style={{ marginTop: 10 }}>
-            {reasons.map((r, i) => (
-              <div
-                key={`url-${i}`}
-                style={{
-                  fontSize: 12,
-                  color: "#4b5563",
-                  padding: "4px 0",
-                  borderTop: i > 0 ? "1px solid #e5e7eb" : undefined,
-                }}
-              >
-                {"\u2022"} {r}
-              </div>
-            ))}
-            {pageReasons.map((r, i) => (
-              <div
-                key={`page-${i}`}
-                style={{
-                  fontSize: 12,
-                  color: "#7c3aed",
-                  padding: "4px 0",
-                  borderTop: "1px solid #e5e7eb",
-                }}
-              >
-                {"\u2022"} {r}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Status panel components/StatusPanel.tsx'e tasindi */}
+      <StatusPanel
+        config={config}
+        displayStatus={displayStatus}
+        displayDomain={displayDomain}
+        settings={settings}
+        reasons={reasons}
+        pageReasons={pageReasons}
+        isWhitelisted={isWhitelisted}
+        popupWhitelistInput={popupWhitelistInput}
+        setPopupWhitelistInput={setPopupWhitelistInput}
+        handleAddToWhitelist={handleAddToWhitelist}
+        setShowCloseConfirm={setShowCloseConfirm}
+        setShowTrustConfirm={setShowTrustConfirm}
+        enabled={enabled}
+      />
 
       <BreachBadge domain={displayDomain} />
 
-      {/* Stats */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-around",
-          padding: "10px 16px",
-          background: "white",
-          borderTop: "1px solid #e5e7eb",
-        }}
-      >
-        <StatItem label={t.dashboard.control} value={stats.urlsChecked} />
-        <StatItem label={t.dashboard.threat} value={stats.threatsBlocked} color="#dc2626" />
-        <StatItem label={t.dashboard.tracker} value={stats.trackersBlocked} color="#d97706" />
-      </div>
-
-      {/* Network Monitoring Stats — per-tab */}
-      {tabStats && tabStats.requestsChecked > 0 && (
-        <div style={{ padding: "8px 16px", background: "#f0f9ff", borderTop: "1px solid #e0f2fe" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#0369a1", marginBottom: 4 }}>
-            {t.networkStats.title}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-around", marginBottom: 4 }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "#0369a1" }}>{tabStats.requestsChecked}</div>
-              <div style={{ fontSize: 10, color: "#6b7280" }}>{t.networkStats.request}</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "#0369a1" }}>{tabStats.domains.length}</div>
-              <div style={{ fontSize: 10, color: "#6b7280" }}>{t.networkStats.domain}</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "#dc2626" }}>{tabStats.threatsDetected}</div>
-              <div style={{ fontSize: 10, color: "#6b7280" }}>{t.networkStats.threat}</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "#ea580c" }}>{tabStats.requestsBlocked}</div>
-              <div style={{ fontSize: 10, color: "#6b7280" }}>{t.networkStats.blocked}</div>
-            </div>
-          </div>
-          {tabStats.threats.length > 0 && (
-            <div style={{ maxHeight: 60, overflowY: "auto" }}>
-              {tabStats.threats.map((t, i) => (
-                <div key={i} style={{ fontSize: 10, color: t.level === "DANGEROUS" ? "#dc2626" : "#d97706", padding: "1px 0" }}>
-                  {t.domain}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* History Toggle */}
-      <div style={{ padding: "6px 16px", borderTop: "1px solid #e5e7eb" }}>
-        <button
-          onClick={handleToggleHistory}
-          style={{
-            width: "100%",
-            padding: "6px 0",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            fontSize: 12,
-            color: "#3b82f6",
-            fontFamily: "inherit",
-          }}
-        >
-          {showHistory ? t.history.hide : t.history.show}
-        </button>
-      </div>
-
-      {showHistory && (
-        <div style={{ maxHeight: 200, overflowY: "auto", borderTop: "1px solid #e5e7eb" }}>
-          {history.length === 0 ? (
-            <div style={{ padding: "12px 16px", fontSize: 12, color: "#9ca3af", textAlign: "center" }}>
-              {t.history.empty}
-            </div>
-          ) : (
-            <>
-              {history.slice(0, HISTORY_DISPLAY_LIMIT).map((entry, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: "6px 16px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    borderBottom: "1px solid #f3f4f6",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#374151" }}>
-                      {entry.domain}
-                    </div>
-                    <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                      {new Date(entry.checkedAt).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      color: entry.level === "SAFE" ? "#166534" : entry.level === "DANGEROUS" ? "#dc2626" : entry.level === "SUSPICIOUS" ? "#d97706" : "#6b7280",
-                      background: entry.level === "SAFE" ? "#dcfce7" : entry.level === "DANGEROUS" ? "#fef2f2" : entry.level === "SUSPICIOUS" ? "#fffbeb" : "#f3f4f6",
-                    }}
-                  >
-                    {entry.level === "SAFE" ? t.status.safe : entry.level === "DANGEROUS" ? "Tehlikeli" : entry.level === "SUSPICIOUS" ? t.status.suspicious : t.status.unknown}
-                  </span>
-                </div>
-              ))}
-              <div style={{ padding: "6px 16px", textAlign: "center" }}>
-                <button
-                  onClick={handleClearHistory}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#ef4444",
-                    cursor: "pointer",
-                    fontSize: 11,
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {t.history.clear}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      <DurumSkorCards
+        history={history}
+        durumSkorFilter={durumSkorFilter}
+        onSkorClick={handleDurumSkorClick}
+      />
 
       </>
       )}
+      </>
+      )}
 
-      {/* Footer with debug info */}
-      <div
-        style={{
-          padding: "6px 16px",
-          fontSize: 10,
-          color: "#9ca3af",
-          background: "#f9fafb",
-          borderTop: "1px solid #e5e7eb",
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: debugInfo ? 2 : 0 }}>{t.footer}</div>
-        {debugInfo && (
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#b0b5bd" }}>
-            <span>init: {debugInfo.initTimings.total ?? "?"}ms</span>
-            <span>liste: {debugInfo.blacklistSize}</span>
-            <span>uptime: {Math.round(debugInfo.uptime / 1000)}s</span>
+      {!notificationsOpen && <Footer />}
+
+      {/* Confirmation modal shown when the user tries to turn OFF danger
+          warnings. UX: "keep protecting" is a big bright-green button; the
+          "disable" action is a plain, dim text link so a careless tap can't
+          easily switch protection off. */}
+      {showDisableConfirm && settings && (
+        <ConfirmModal
+          title={t.confirmDisableNotif.message}
+          body={t.confirmDisableNotif.detail}
+        >
+          <button
+            onClick={() => setShowDisableConfirm(false)}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+            style={{
+              width: "100%",
+              padding: "11px 0",
+              background: "var(--accent-success)",
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              marginBottom: 8,
+              boxShadow: "0 4px 12px rgba(22,163,74,0.3)",
+              transition: "transform 0.15s ease",
+            }}
+          >
+            🟢 {t.confirmDisableNotif.keep}
+          </button>
+          <button
+            onClick={() => {
+              saveSettings({ ...settings, showDomWarnings: false });
+              setShowDisableConfirm(false);
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+            style={{
+              width: "100%",
+              padding: "6px 0",
+              background: "transparent",
+              border: "none",
+              color: "var(--text-faint)",
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "transform 0.15s ease",
+            }}
+          >
+            {t.confirmDisableNotif.disable}
+          </button>
+        </ConfirmModal>
+      )}
+
+      {/* "Sayfadan Ayrıl" confirmation — closing the dangerous tab IS the safe
+          move here, so the filled "Sekmeyi Kapat" button is dominant. "Vazgeç"
+          stays transparent so a reflex tap on it leaves the user back on the
+          warning, not still on the page. */}
+      {showCloseConfirm && (
+        <ConfirmModal
+          title={t.speechBubble.confirmCloseTitle}
+          body={t.speechBubble.confirmCloseBody}
+        >
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                setShowCloseConfirm(false);
+                handleClosePage();
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+              style={{
+                flex: 1,
+                padding: "9px 8px",
+                background: "var(--accent-info)",
+                color: "white",
+                border: "none",
+                borderRadius: 9,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                boxShadow: "0 3px 8px rgba(37,99,235,0.35)",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              {t.speechBubble.confirmCloseConfirm}
+            </button>
+            <button
+              onClick={() => setShowCloseConfirm(false)}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+              style={{
+                flex: 1,
+                padding: "9px 8px",
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border-strong)",
+                borderRadius: 9,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              {t.speechBubble.confirmCloseCancel}
+            </button>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        </ConfirmModal>
+      )}
 
-function StatItem({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ fontWeight: 700, fontSize: 16, color: color || "#1e293b" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#9ca3af" }}>{label}</div>
+      {/* "Bu Adrese Güven" confirmation — staying away IS the safe move here,
+          so "Vazgeç" is the dominant filled-gray button (easy reflex tap).
+          "Evet, Güven" is the subtle outlined button with a faint amber tint
+          so the user has to deliberately aim at it to take the risk. */}
+      {showTrustConfirm && (
+        <ConfirmModal
+          title={t.speechBubble.confirmTrustTitle}
+          body={t.speechBubble.confirmTrustBody}
+        >
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setShowTrustConfirm(false)}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+              style={{
+                flex: 1,
+                padding: "9px 8px",
+                background: "#475569",
+                color: "white",
+                border: "none",
+                borderRadius: 9,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                boxShadow: "0 3px 8px rgba(71,85,105,0.30)",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              {t.speechBubble.confirmTrustCancel}
+            </button>
+            <button
+              onClick={() => {
+                setShowTrustConfirm(false);
+                handleAddToWhitelist();
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.03)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+              style={{
+                flex: 1,
+                padding: "9px 8px",
+                background: "transparent",
+                color: "var(--accent-warning)",
+                border: "1px solid #fcd34d",
+                borderRadius: 9,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              {t.speechBubble.confirmTrustConfirm}
+            </button>
+          </div>
+        </ConfirmModal>
+      )}
     </div>
   );
 }

@@ -1,20 +1,11 @@
 {
-  "manifest_version": 3,
-  "name": "__MSG_extensionName__",
-  "version": "0.2.0",
-  "description": "__MSG_extensionDescription__",
-  "default_locale": "tr",
-  "icons": {
-    "16": "icons/icon-16.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
-  },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
-      "48": "icons/icon-48.png"
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
     },
+    "default_popup": "popup.html",
     "default_title": "Alparslan"
   },
   "background": {
@@ -23,11 +14,25 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
       "js": ["content.js"],
+      "matches": ["\u003Call_urls>"],
       "run_at": "document_idle"
     }
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'"
+  },
+  "default_locale": "tr",
+  "description": "__MSG_extensionDescription__",
+  "host_permissions": ["\u003Call_urls>"],
+  "icons": {
+    "128": "icons/icon-128.png",
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png"
+  },
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "options_page": "options.html",
   "permissions": [
     "activeTab",
     "storage",
@@ -36,9 +41,5 @@
     "webRequest",
     "declarativeNetRequest"
   ],
-  "options_page": "options.html",
-  "host_permissions": ["<all_urls>"],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'"
-  }
+  "version": "0.3.0"
 }

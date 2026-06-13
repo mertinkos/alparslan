@@ -74,6 +74,12 @@ const PHISH_CORPUS: PhishCase[] = [
   // Turkish dotless ı (0131)
   { url: "https://gar\u0131nti.com.tr", tag: "homoglyph:garanti:dotless-i", expected: "AT_LEAST_SUSPICIOUS" },
 
+  // ASCII digit/letter confusables (issue #27)
+  { url: "https://s0k.com", tag: "digit-confusable:s0k", expected: "DANGEROUS" },
+  { url: "https://b1m.com", tag: "digit-confusable:b1m", expected: "DANGEROUS" },
+  { url: "https://n1l.com", tag: "digit-confusable:n1l", expected: "DANGEROUS" },
+  { url: "https://g00gle.com", tag: "digit-confusable:g00gle", expected: "DANGEROUS" },
+
   // IP-address URL
   { url: "http://185.34.56.78/login", tag: "ip-url", expected: "AT_LEAST_SUSPICIOUS" },
   { url: "http://10.0.0.1/bank", tag: "ip-url:private", expected: "AT_LEAST_SUSPICIOUS" },
