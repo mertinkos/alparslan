@@ -34,12 +34,12 @@ test.describe("Whitelist validation", () => {
 
   test("rejects public suffixes and empty URL inputs", async ({ context, extensionId }) => {
     const options = await openOptionsPage(context, extensionId);
-    await expect(options.getByText("Beyaz liste boş")).toBeVisible();
+    await expect(options.getByText("Güvendiğiniz bağlantı listesi boş")).toBeVisible();
 
     for (const raw of [".com", "com", "com.tr", "co.uk", "", "http://"]) {
       await options.getByRole("textbox").fill(raw);
       await options.getByRole("button", { name: "Ekle" }).click();
-      await expect(options.getByText("Beyaz liste boş")).toBeVisible();
+      await expect(options.getByText("Güvendiğiniz bağlantı listesi boş")).toBeVisible();
     }
 
     await options.close();
