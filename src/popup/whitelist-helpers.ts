@@ -12,7 +12,7 @@ export function normalizeQuickWhitelistDomain(value: string): string {
   if (!input) return "";
 
   const canonical = canonicalizeUrl(input.includes("://") ? input : `https://${input}`);
-  const hostname = canonical.hostname ?? input.split("/")[0].split("?")[0].split("#")[0];
+  const hostname = canonical.hostname ?? input.split("/")[0].split("?")[0].split("#")[0].split(":")[0];
 
   return hostname.replace(/^www\./, "");
 }

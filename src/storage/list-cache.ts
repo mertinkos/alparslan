@@ -137,11 +137,11 @@ async function runMigration(): Promise<void> {
     const settings = result.settings as { whitelist?: string[] } | undefined;
     if (settings?.whitelist?.length) {
       for (const domain of settings.whitelist) {
-          const d = normalizeListDomain(domain);
-          if (d && canMatchListDomain(d) && !whitelistSet.has(d)) {
-            whitelistSet.add(d);
-            await idbAddWhitelist(d, "import");
-          }
+        const d = normalizeListDomain(domain);
+        if (d && canMatchListDomain(d) && !whitelistSet.has(d)) {
+          whitelistSet.add(d);
+          await idbAddWhitelist(d, "import");
+        }
       }
       logger.debug(`Migrated ${settings.whitelist.length} whitelist entries`);
     }
