@@ -23,14 +23,18 @@ const STARTING_SCORE = 100;
 // Skor asla 0'a inmez: cok tehdit toplansa bile alt sinir 20'dir.
 const MIN_SCORE = 20;
 // Unique-domain bazli penalty modeli:
-//   - "Engellenen Tehdit" (UNIQUE tehdit domain)  -> -10 puan
-//   - "Potansiyel Risk"   (UNIQUE UNKNOWN domain) -> -5  puan
-//   - "Detayli Guvenlik Taramasi" pasif           -> -10 puan
+//   - DANGEROUS (USOM blocklist veya kesin tehdit)  -> -15 puan
+//   - SUSPICIOUS (sezgi/heuristik, kesin degil)     -> -10 puan
+//   - UNKNOWN (henuz dogrulanmamis itibar)          -> -5  puan
+//   - "Detayli Guvenlik Taramasi" pasif             -> -10 puan
+// @mertinkos review yorumu: DANGEROUS ile SUSPICIOUS esitti (ikisi de 10),
+// halbuki DANGEROUS kesin tehdit, SUSPICIOUS sadece sezgisel ipuclarina
+// dayaniyor. Net hiyerarsi: dangerous > suspicious > unknown (15/10/5).
 // Background, state.history'den BENZERSIZ domain sayilarini cikartip
 // synthetic metrics olarak buraya gonderir. Boylece kullanici ayni siteye
 // 30 kere girse bile bir kere puan kesilir, sonraki ziyaretler skoru
 // dusurmez.
-const DANGEROUS_PENALTY = 10;
+const DANGEROUS_PENALTY = 15;
 const SUSPICIOUS_PENALTY = 10;
 const UNKNOWN_PENALTY = 5;
 const SETTING_OFF_PENALTY = 10;

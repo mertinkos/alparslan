@@ -14,14 +14,14 @@ describe("calculateScore (unique-domain penalty + reward model)", () => {
     expect(result.tips).toContain(t.tips.notActive);
   });
 
-  it("1 DANGEROUS visit: -10 penalty + 5 risk-clean reward = 95", () => {
+  it("1 DANGEROUS visit: -15 penalty + 5 risk-clean reward = 90", () => {
     const metrics: WeeklyMetrics = {
       ...EMPTY_WEEKLY_METRICS,
       urlsChecked: 5,
       dangerousSitesVisited: 1,
     };
     const result = calculateScore(metrics);
-    expect(result.score).toBe(95);
+    expect(result.score).toBe(90);
     expect(result.tips.some((tip) => tip.includes("tehlikeli"))).toBe(true);
   });
 
@@ -49,13 +49,13 @@ describe("calculateScore (unique-domain penalty + reward model)", () => {
     const metrics: WeeklyMetrics = {
       ...EMPTY_WEEKLY_METRICS,
       urlsChecked: 20,
-      dangerousSitesVisited: 1, // -10
+      dangerousSitesVisited: 1, // -15
       suspiciousSitesVisited: 2, // -20
       unknownSitesVisited: 5,    // -25
     };
     // Threats > 0 → no +10 reward; unknowns > 0 → no +5 reward
     const result = calculateScore(metrics);
-    expect(result.score).toBe(100 - 10 - 20 - 25);
+    expect(result.score).toBe(100 - 15 - 20 - 25);
   });
 
   it("floors at 20 even when penalties exceed 100", () => {
@@ -126,7 +126,7 @@ describe("calculateScore (unique-domain penalty + reward model)", () => {
       ...EMPTY_WEEKLY_METRICS,
       dangerousSitesVisited: 1,
     };
-    expect(calculateScore(m1).score).toBe(100 - 10 + 5); // 95
+    expect(calculateScore(m1).score).toBe(100 - 15 + 5); // 90
 
     // 1 suspicious also counts as threat
     const m2: WeeklyMetrics = {
