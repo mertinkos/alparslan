@@ -151,8 +151,14 @@ describe("Trusted name as substring — NOW CAUGHT", () => {
     expect(result.reason).toBe("contains-trusted-name");
   });
 
-  it("catches hepsiburadaindirim.com (long trusted name embedded)", () => {
+
+  it("does NOT flag hepsiburadaindirim.com (DEFAULT brand, only LOW_RISK keyword)", () => {
     const result = checkTyposquatting("hepsiburadaindirim.com");
+    expect(result.isSuspicious).toBe(false);
+  });
+
+  it("catches hepsiburada-indirim.com (separator present — hasSeparator=true path)", () => {
+    const result = checkTyposquatting("hepsiburada-indirim.com");
     expect(result.isSuspicious).toBe(true);
     expect(result.similarTo).toBe("hepsiburada.com");
     expect(result.reason).toBe("contains-trusted-name");

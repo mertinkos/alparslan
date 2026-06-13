@@ -180,6 +180,8 @@ const LEGIT_CORPUS: string[] = [
   "https://isbasiplatformu.com/",
   "https://garantifonlari.gov.tr/",
   "https://goturkiye.com/",
+  "https://garantiliindirim.com/",
+  "https://akbankindirim.com/",
 ];
 
 describe("Phase 3 — Detection effectiveness", () => {

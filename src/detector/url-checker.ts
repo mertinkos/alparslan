@@ -126,10 +126,24 @@ const BRAND_SUBDOMAINS: ReadonlySet<string> = new Set([
   "cloudflarestream.com",
 ]);
 
-const SUSPICIOUS_KEYWORDS: ReadonlyArray<string> = [
-  "giris", "dogrulama", "hesap", "odeme", "sifre", "parola", "aktivasyon", "indirim", "online",
+// Credential/payment-theft signals — strong indicator of phishing intent.
+// Used to flag contains-trusted-name hits for ALL brand tiers.
+const HIGH_RISK_KEYWORDS: ReadonlyArray<string> = [
+  "giris", "dogrulama", "hesap", "odeme", "sifre", "parola", "aktivasyon", "online",
   "login", "secure", "verify", "auth", "signin", "banking", "payment",
 ];
+
+// Generic promotional word — meaningful only alongside a GENERIC brand
+// (google, paypal, microsoft …) or as a minor free-domain score bump.
+// NOT strong enough to flag a DEFAULT brand like garanti or akbank alone:
+// legitimate discount-portal domains (garantiliindirim.com, akbankindirim.com)
+// legitimately contain this word without phishing intent.
+const LOW_RISK_KEYWORDS: ReadonlyArray<string> = [
+  "indirim",
+];
+
+// Combined set — used by the free-domain keyword score path (+20).
+const SUSPICIOUS_KEYWORDS: ReadonlyArray<string> = [...HIGH_RISK_KEYWORDS, ...LOW_RISK_KEYWORDS];
 
 const GENERIC_BRAND_NAMES: ReadonlySet<string> = new Set([
   "turkiye", "google", "microsoft", "apple", "amazon",
@@ -423,14 +437,21 @@ export function checkTyposquatting(
 
     if (strippedTrustedName.length >= 5 && strippedName.length > strippedTrustedName.length) {
       if (strippedName.includes(strippedTrustedName)) {
-        const hasKeyword = SUSPICIOUS_KEYWORDS.some((kw) => strippedName.includes(kw));
+        const hasHighRiskKeyword = HIGH_RISK_KEYWORDS.some((kw) => strippedName.includes(kw));
+        const hasAnyKeyword = SUSPICIOUS_KEYWORDS.some((kw) => strippedName.includes(kw));
         const hasSeparator = rawName.includes("-");
         const ratio = strippedName.length / strippedTrustedName.length;
         const isGeneric = GENERIC_BRAND_NAMES.has(strippedTrustedName);
 
+        // GENERIC brands (google, paypal …): any keyword or separator is
+        // suspicious when the domain isn't too long (ratio < 2.0).
+        // DEFAULT brands (garanti, akbank …): only HIGH-RISK keywords
+        // (credential/payment-oriented) or a separator warrant flagging —
+        // LOW-RISK words like "indirim" alone don't flag, because legitimate
+        // discount portals (garantiliindirim.com, akbankindirim.com) use them.
         const shouldFlag = isGeneric
-          ? (hasKeyword || hasSeparator) && ratio < 2.0
-          : hasKeyword || hasSeparator;
+          ? (hasAnyKeyword || hasSeparator) && ratio < 2.0
+          : hasHighRiskKeyword || hasSeparator;
 
         if (shouldFlag) {
           best = pickBetter(best, { similarTo: trusted, reason: "contains-trusted-name", priority: 4 });
