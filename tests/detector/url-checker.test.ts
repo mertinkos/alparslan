@@ -164,6 +164,36 @@ describe("checkUrl", () => {
     expect(result.reasons.some((r) => r.includes("anahtar kelime"))).toBe(true);
   });
 
+  it.each([
+    [
+      "https://akbank.com.tr.evil.com/login",
+      ThreatLevel.SUSPICIOUS,
+      55,
+      t.reasons.subdomainTyposquat, // "alt alan adında benzer isim"
+    ],
+    [
+      "https://login-akbank.com/",
+      ThreatLevel.DANGEROUS,
+      70,
+      t.reasons.containsTrusted, // "güvenilir ismi içeriyor"
+    ],
+    [
+      "https://akbank-secure.com/",
+      ThreatLevel.DANGEROUS,
+      70,
+      t.reasons.containsTrusted, // "güvenilir ismi içeriyor"
+    ],
+  ])(
+    "should flag regression corpus phishing URL %s",
+    (url, level, score, reasonFragment) => {
+      const result = checkUrl(url);
+
+      expect(result.level).toBe(level);
+      expect(result.score).toBeGreaterThanOrEqual(score);
+      expect(result.reasons.some((r) => r.includes(reasonFragment))).toBe(true);
+    },
+  );
+
   it("should include timestamp in result", () => {
     const before = Date.now();
     const result = checkUrl("https://example.com");
