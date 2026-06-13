@@ -593,3 +593,35 @@ describe("Best-match candidate selection", () => {
     expect(result.similarTo).toBe("garanti.com.tr");
   });
 });
+
+
+describe("Letter-doubling (doubled-char) attack detection", () => {
+  it.each([
+    // [domain, expectedSimilarTo]
+    ["garrantii.com.tr", "garanti.com.tr"],
+    ["issbank.com.tr", "isbank.com.tr"],
+    ["akbannk.com", "akbank.com.tr"],
+  ])("%s → detected as edit-distance typosquat of %s", (domain, similarTo) => {
+    const result = checkTyposquatting(domain);
+    expect(result.isSuspicious).toBe(true);
+    expect(result.similarTo).toBe(similarTo);
+    expect(result.reason).toBe("edit-distance");
+  });
+
+  it.each([
+    // These have distance=2 & lenDiff=2 but no consecutive duplicate → must NOT match
+    "goturkiye.com",   // "go" prefix, no repeated char
+    "newisbank.com",   // "new" prefix, no repeated char — lenDiff=3, caught by shortName
+  ])("%s → NOT flagged by doubled-char heuristic (no consecutive duplicate)", (domain) => {
+    const result = checkTyposquatting(domain);
+    // goturkiye: no consecutive repeat → isDoubledCharAttack=false
+    // Should stay UNKNOWN (edit-distance path only fires for distance<=2 && lenDiff<=1)
+    if (domain === "goturkiye.com") {
+      expect(result.isSuspicious).toBe(false);
+    } else {
+      // newisbank: lenDiff=3 so shortName guard or distance>2 prevents it
+      expect(result.isSuspicious).toBe(false);
+    }
+  });
+});
+

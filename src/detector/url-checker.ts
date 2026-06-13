@@ -410,7 +410,10 @@ export function checkTyposquatting(
     const distance = levenshteinDistance(strippedName, strippedTrustedName);
     const lenDiff = Math.abs(strippedName.length - strippedTrustedName.length);
     const shortName = strippedTrustedName.length <= 4 || strippedName.length <= 4;
-    if (!shortName && (distance === 1 || (distance === 2 && lenDiff === 1))) {
+    const isDoubledCharAttack =
+      distance === 2 && lenDiff === 2 &&
+      /(.)\1/.test(strippedName) && strippedName.length > strippedTrustedName.length;
+    if (!shortName && (distance === 1 || (distance === 2 && lenDiff === 1) || isDoubledCharAttack)) {
       best = pickBetter(best, {
         similarTo: trusted,
         reason: hasHomoglyphs ? "homoglyph" : "edit-distance",
