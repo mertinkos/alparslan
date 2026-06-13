@@ -46,6 +46,11 @@ describe("extractRootDomain", () => {
   it("should handle .gov.tr domains", () => {
     expect(extractRootDomain("www.turkiye.gov.tr")).toBe("turkiye.gov.tr");
   });
+
+  it("should handle private suffix domains", () => {
+    expect(extractRootDomain("foo.github.io")).toBe("foo.github.io");
+    expect(extractRootDomain("bar.foo.github.io")).toBe("foo.github.io");
+  });
 });
 
 describe("levenshteinDistance", () => {
@@ -82,6 +87,13 @@ describe("checkTyposquatting", () => {
   it("should not flag completely different domains", () => {
     const result = checkTyposquatting("randomsite.com");
     expect(result.isSuspicious).toBe(false);
+  });
+
+  it("should detect trusted-name hiding across canonical subdomain boundaries", () => {
+    const result = checkTyposquatting("garanti.evil.com");
+
+    expect(result.isSuspicious).toBe(true);
+    expect(result.reason).toBe("subdomain-impersonation");
   });
 });
 
@@ -127,9 +139,24 @@ describe("checkUrl", () => {
     expect(result.score).toBeGreaterThanOrEqual(30);
   });
 
-  it("should flag excessive subdomains", () => {
-    const result = checkUrl("https://a.b.c.d.e.example.com");
-    expect(result.reasons.some((r) => r.includes("alt alan"))).toBe(true);
+  describe("excessive subdomain threshold (> 3 labels)", () => {
+    it("3 subdomain labels — must NOT trigger excessive-subdomain warning", () => {
+      // a.b.c  → canonical.subdomain = "a.b.c" → 3 labels, threshold is > 3 → no flag
+      const result = checkUrl("https://a.b.c.example.com");
+      expect(result.reasons.some((r) => r.includes("alt alan"))).toBe(false);
+      expect(result.level).not.toBe(ThreatLevel.SUSPICIOUS);
+    });
+
+    it("4 subdomain labels — must trigger excessive-subdomain warning", () => {
+      // a.b.c.d → canonical.subdomain = "a.b.c.d" → 4 labels, threshold is > 3 → flag
+      const result = checkUrl("https://a.b.c.d.example.com");
+      expect(result.reasons.some((r) => r.includes("alt alan"))).toBe(true);
+    });
+
+    it("5+ subdomain labels — also triggers (existing smoke test)", () => {
+      const result = checkUrl("https://a.b.c.d.e.example.com");
+      expect(result.reasons.some((r) => r.includes("alt alan"))).toBe(true);
+    });
   });
 
   it("should flag suspicious keywords in domain", () => {
