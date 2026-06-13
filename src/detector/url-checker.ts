@@ -4,6 +4,7 @@ import { usomBloomTest } from "@/blocklist/usom-updater";
 import { hasDomain } from "@/blocklist/indexeddb-store";
 import { isDynamicWhitelisted, isUgcDomain, getRiskyTld } from "@/blocklist/whitelist-updater";
 import t from "@/i18n/tr";
+import { canonicalizeUrl } from "@/detector/url-canonicalizer";
 
 // ─── PUNYCODE DECODER (RFC 3492) ─────────────────────────────────
 // Chrome converts IDN domains to punycode (е-devlet.com → xn--devlet-2of.com).
@@ -211,24 +212,42 @@ const TRUSTED_DOMAINS = new Set([
 export { getBlacklistSize as getBlocklistSize } from "@/storage/list-cache";
 
 export function extractDomain(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.toLowerCase();
-  } catch {
-    return null;
-  }
+  return canonicalizeUrl(url).hostname;
 }
 
 export function extractRootDomain(hostname: string): string {
-  const parts = hostname.split(".");
-  if (parts.length <= 2) return hostname;
+  const canonical = canonicalizeUrl(`https://${hostname}`);
 
-  // Handle .com.tr, .gov.tr, .org.tr etc.
-  const secondLevel = parts[parts.length - 2];
-  if (["com", "gov", "org", "edu", "net", "mil"].includes(secondLevel) && parts.length >= 3) {
-    return parts.slice(-3).join(".");
-  }
-  return parts.slice(-2).join(".");
+  return canonical.registrableDomain ?? canonical.hostname ?? hostname.toLowerCase();
+}
+
+function getRootLabelCountFromCanonical(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): number {
+  const root = canonical.registrableDomain ?? canonical.hostname ?? hostname.toLowerCase();
+
+  return root.split(".").length;
+}
+
+function extractRootDomainPreservingLabels(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): string {
+  const parts = hostname.toLowerCase().split(".");
+  const rootLabelCount = getRootLabelCountFromCanonical(hostname, canonical);
+
+  return parts.slice(-rootLabelCount).join(".");
+}
+
+function extractSubdomainPartsPreservingLabels(
+  hostname: string,
+  canonical: ReturnType<typeof canonicalizeUrl>,
+): string[] {
+  const parts = hostname.toLowerCase().split(".");
+  const rootLabelCount = getRootLabelCountFromCanonical(hostname, canonical);
+
+  return parts.length > rootLabelCount ? parts.slice(0, -rootLabelCount) : [];
 }
 
 export function levenshteinDistance(a: string, b: string): number {
@@ -340,9 +359,11 @@ function pickBetter(
 
 export function checkTyposquatting(
   domain: string,
+  canonical?: ReturnType<typeof canonicalizeUrl>,
 ): { isSuspicious: boolean; similarTo: string | null; reason: string | null } {
   const decoded = decodePunycodeDomain(domain);
-  const root = extractRootDomain(decoded);
+  const resolvedCanonical = canonical ?? canonicalizeUrl(`https://${decoded}`);
+  const root = extractRootDomainPreservingLabels(decoded, resolvedCanonical);
 
   if (TRUSTED_DOMAINS.has(root)) {
     return { isSuspicious: false, similarTo: null, reason: null };
@@ -357,8 +378,8 @@ export function checkTyposquatting(
   const hasHomoglyphs = rawName !== normalizedName || domain !== decoded;
   const digNormName = normalizeDigitLetterConfusables(strippedName);
 
-  const subdomainParts = decoded.split(".");
-  const allParts = subdomainParts.length > 2 ? subdomainParts.slice(0, -2) : [];
+  // Check all subdomain parts for trusted name hiding (e.g. garanti.evil.com)
+  const allParts = extractSubdomainPartsPreservingLabels(decoded, resolvedCanonical);
 
   let best: TyposquattingCandidate | null = null;
 
@@ -438,7 +459,8 @@ export function checkUrl(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
 ): ThreatResult {
-  const domain = extractDomain(url);
+  const canonical = canonicalizeUrl(url);
+  const domain = canonical.hostname;
   const now = Date.now();
 
   if (!domain) {
@@ -451,7 +473,7 @@ export function checkUrl(
     };
   }
 
-  const rootDomain = extractRootDomain(domain);
+  const rootDomain = canonical.registrableDomain ?? domain;
   const reasons: string[] = [];
   let score = 0;
 
@@ -483,7 +505,7 @@ export function checkUrl(
   }
 
   // Medium + High: typosquatting check
-  const typo = checkTyposquatting(domain);
+  const typo = checkTyposquatting(domain, canonical);
   if (typo.isSuspicious) {
     const reasonLabels: Record<string, { score: number; text: string }> = {
       "homoglyph": { score: 100, text: t.reasons.homoglyph },
@@ -512,8 +534,8 @@ export function checkUrl(
   }
 
   // Medium + High: excessive subdomain check
-  const subdomainCount = domain.split(".").length;
-  if (subdomainCount > 4) {
+  const subdomainCount = canonical.subdomain ? canonical.subdomain.split(".").length : 0;
+  if (subdomainCount > 3) {
     score += 15;
     reasons.push(t.reasons.excessiveSubdomains);
   }
