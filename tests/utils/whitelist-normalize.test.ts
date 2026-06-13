@@ -62,6 +62,9 @@ describe("normalizeWhitelistInput", () => {
       ["com.tr"],    // compound public suffix
       ["co.uk"],
       ["gov.tr"],
+      ["github.io"],
+      ["pages.dev"],
+      ["blogspot.com"],
       ["https://co.uk/"],   // URL-shaped public suffix
       ["http://"],   // malformed URL
       ["://"],
@@ -69,6 +72,16 @@ describe("normalizeWhitelistInput", () => {
       ["..."],
     ])("%s → empty", (input) => {
       expect(normalizeWhitelistInput(input)).toBe("");
+    });
+  });
+
+  describe("allows private-suffix registrable domains", () => {
+    it.each([
+      ["foo.github.io", "foo.github.io"],
+      ["https://foo.pages.dev/path", "foo.pages.dev"],
+      ["foo.blogspot.com", "foo.blogspot.com"],
+    ])("%s → %s", (input, expected) => {
+      expect(normalizeWhitelistInput(input)).toBe(expected);
     });
   });
 });
