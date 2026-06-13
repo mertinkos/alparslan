@@ -130,14 +130,10 @@ const BRAND_SUBDOMAINS: ReadonlySet<string> = new Set([
 // Used to flag contains-trusted-name hits for ALL brand tiers.
 const HIGH_RISK_KEYWORDS: ReadonlyArray<string> = [
   "giris", "dogrulama", "hesap", "odeme", "sifre", "parola", "aktivasyon", "online",
-  "login", "secure", "verify", "auth", "signin", "banking", "payment",
+  "login", "secure", "verify", "auth", "signin", "banking", "payment", "destek"
 ];
 
-// Generic promotional word — meaningful only alongside a GENERIC brand
-// (google, paypal, microsoft …) or as a minor free-domain score bump.
-// NOT strong enough to flag a DEFAULT brand like garanti or akbank alone:
-// legitimate discount-portal domains (garantiliindirim.com, akbankindirim.com)
-// legitimately contain this word without phishing intent.
+
 const LOW_RISK_KEYWORDS: ReadonlyArray<string> = [
   "indirim",
 ];
