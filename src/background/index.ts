@@ -260,14 +260,16 @@ initServiceWorker().catch((err) => {
 //      new window is created and it's the ONLY window, the user effectively
 //      restarted Chrome from their perspective.
 //
-// `state.history = []` because the popup's Bilinmeyen count is derived from
-// history, so a real reset has to wipe both.
+// Sadece SESSION sayaclarini (state.stats) sifirlar — taze gun, taze
+// "Engellenen Tehdit / Tarama" sayim. state.history (kullanicinin kalici
+// tarama gecmisi) DOKUNULMAZ; her Chrome restart'inda silinmesi kotu UX
+// olurdu, kullanici uzun donemli geçmisini kaybederdi.
+// Popup'taki UNKNOWN sayimi history.filter ile hesaplaniyor — bu sayede
+// session reset olsa bile geçmis korunur, sayimlar dogru gösterilir.
 function resetSessionCounters(reason: string): void {
   logger.debug(`Session reset: ${reason}`);
   state.stats = { ...DEFAULT_STATS };
-  state.history = [];
   chrome.storage.sync.set({ stats: state.stats });
-  chrome.storage.local.set({ history: state.history });
 }
 
 chrome.runtime.onStartup?.addListener?.(() => resetSessionCounters("onStartup"));
