@@ -53,3 +53,13 @@ export async function getHistory(page: Page): Promise<ScanHistoryEntry[]> {
 export async function clearHistory(page: Page): Promise<void> {
   await sendRuntimeMessage<{ ok: boolean }>(page, { type: "CLEAR_HISTORY" });
 }
+
+export async function removeFromWhitelist(
+  page: Page,
+  domain: string,
+): Promise<void> {
+  await sendRuntimeMessage<{ ok: boolean }>(page, {
+    type: "REMOVE_FROM_WHITELIST",
+    domain,
+  });
+}
