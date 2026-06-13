@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures/extension";
 import { openOptionsPage, navigateToSite } from "../helpers/extension-page";
+import { routeExampleCom } from "../helpers/site-routes";
 
 test.describe("Options Page — Happy Path", () => {
   test("should render options page header", async ({ context, extensionId }) => {
@@ -41,6 +42,7 @@ test.describe("Options Page — Happy Path", () => {
   });
 
   test("should show security summary after browsing", async ({ context, extensionId }) => {
+    await routeExampleCom(context);
     const page = await navigateToSite(context, "https://example.com");
     await page.waitForTimeout(1000);
     await page.close();
