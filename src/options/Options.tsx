@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DEFAULT_SETTINGS, type ExtensionSettings } from "@/utils/types";
-import type { DashboardData } from "@/dashboard/types";
 import { normalizeWhitelistInput } from "@/utils/whitelist-normalize";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import t from "@/i18n/tr";
 
 type ProtectionLevel = ExtensionSettings["protectionLevel"];
@@ -18,7 +18,8 @@ export default function Options() {
   const [newDomain, setNewDomain] = useState("");
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDisableNotif, setShowDisableNotif] = useState(false);
 
   useEffect(() => {
     chrome.storage.sync.get(["settings"], (result) => {
@@ -26,14 +27,6 @@ export default function Options() {
         setSettings({ ...DEFAULT_SETTINGS, ...(result.settings as ExtensionSettings) });
       }
     });
-    chrome.runtime.sendMessage(
-      { type: "GET_DASHBOARD_SCORE" },
-      (response: { dashboard: DashboardData } | null) => {
-        if (response?.dashboard) {
-          setDashboard(response.dashboard);
-        }
-      },
-    );
   }, []);
 
   const saveSettings = useCallback((updated: ExtensionSettings) => {
@@ -49,8 +42,14 @@ export default function Options() {
     saveSettings({ ...settings, protectionLevel: level });
   };
 
+  // Mirrors the popup "Tehlike Uyarıları" toggle: both control `showDomWarnings`
+  // so flipping one reflects in the other. Turning it OFF asks for confirmation.
   const handleNotificationsToggle = () => {
-    saveSettings({ ...settings, notificationsEnabled: !settings.notificationsEnabled });
+    if (settings.showDomWarnings !== false) {
+      setShowDisableNotif(true); // currently ON → confirm before disabling
+    } else {
+      saveSettings({ ...settings, showDomWarnings: true }); // currently OFF → enable
+    }
   };
 
   const handleNetworkMonitoringToggle = () => {
@@ -77,9 +76,15 @@ export default function Options() {
 
   const handleClearData = () => {
     chrome.storage.sync.clear(() => {
-      setSettings(DEFAULT_SETTINGS);
-      setCleared(true);
-      setTimeout(() => setCleared(false), 2000);
+      // Also clear chrome.storage.local — that's where the breach-banner
+      // "bir daha gösterme" dismissed-domains list lives, plus tarama
+      // history and any other locally-cached state. Without this, users
+      // expect a full reset but the dismissed banners stay silenced.
+      chrome.storage.local.remove(["alparslan-breach-dismissed-domains", "history"], () => {
+        setSettings(DEFAULT_SETTINGS);
+        setCleared(true);
+        setTimeout(() => setCleared(false), 2000);
+      });
     });
   };
 
@@ -95,52 +100,6 @@ export default function Options() {
           </p>
         </div>
       </div>
-
-      {/* Security Score Summary */}
-      {dashboard && (
-        <Section title={t.options.weeklySummary}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                border: "3px solid " + (dashboard.score >= 80 ? "#16a34a" : dashboard.score >= 50 ? "#d97706" : "#dc2626"),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 24,
-                fontWeight: 700,
-                color: dashboard.score >= 80 ? "#16a34a" : dashboard.score >= 50 ? "#d97706" : "#dc2626",
-              }}
-            >
-              {dashboard.score}
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                {dashboard.score >= 80
-                  ? t.scoreMessages.great
-                  : dashboard.score >= 50
-                    ? t.scoreMessages.good
-                    : t.scoreMessages.warning}
-              </div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-                {t.weeklyStats(dashboard.currentWeek.urlsChecked)}
-              </div>
-            </div>
-          </div>
-          {dashboard.tips.length > 0 && (
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>{t.dashboard.suggestions}</div>
-              {dashboard.tips.map((tip, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#78350f", padding: "3px 0" }}>
-                  * {tip}
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
-      )}
 
       {/* Saved notification */}
       {saved && (
@@ -196,21 +155,33 @@ export default function Options() {
       {/* Notifications */}
       <Section title={t.options.notifications}>
         <label
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#f8fafc";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "white";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.04)";
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "10px 12px",
             background: "white",
-            borderRadius: 8,
+            borderRadius: 12,
+            transition: "all 0.18s ease",
+            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
             border: "1px solid #e5e7eb",
             cursor: "pointer",
           }}
         >
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.options.threatNotifications}</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.settings.dangerWarnings}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              {t.options.threatNotificationsDesc}
+              {t.settings.dangerWarningsDesc}
             </div>
           </div>
           <div
@@ -219,7 +190,7 @@ export default function Options() {
               width: 44,
               height: 24,
               borderRadius: 12,
-              background: settings.notificationsEnabled ? "#22c55e" : "#d1d5db",
+              background: settings.showDomWarnings !== false ? "#22c55e" : "#d1d5db",
               position: "relative",
               transition: "background 0.2s",
               cursor: "pointer",
@@ -234,7 +205,7 @@ export default function Options() {
                 background: "white",
                 position: "absolute",
                 top: 2,
-                left: settings.notificationsEnabled ? 22 : 2,
+                left: settings.showDomWarnings !== false ? 22 : 2,
                 transition: "left 0.2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
               }}
@@ -246,22 +217,34 @@ export default function Options() {
       {/* Network Monitoring */}
       <Section title={t.options.networkMonitoring}>
         <label
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#f8fafc";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "white";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.04)";
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "10px 12px",
             background: "white",
-            borderRadius: 8,
+            borderRadius: 12,
+            transition: "all 0.18s ease",
+            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
             border: "1px solid #e5e7eb",
             cursor: "pointer",
             marginBottom: 8,
           }}
         >
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.options.networkListenLabel}</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.settings.networkMonitoring}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              {t.options.networkListenDesc}
+              {t.settings.networkMonitoringDesc}
             </div>
           </div>
           <div
@@ -308,6 +291,27 @@ export default function Options() {
             onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAddDomain()}
             placeholder={t.options.whitelistPlaceholder}
+            onMouseEnter={(e) => {
+              if (document.activeElement !== e.currentTarget) {
+                e.currentTarget.style.borderColor = "#93c5fd";
+                e.currentTarget.style.background = "#f8fafc";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (document.activeElement !== e.currentTarget) {
+                e.currentTarget.style.borderColor = "#d1d5db";
+                e.currentTarget.style.background = "white";
+              }
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "#3b82f6";
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.12)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "#d1d5db";
+              e.currentTarget.style.boxShadow = "none";
+            }}
             style={{
               flex: 1,
               padding: "8px 12px",
@@ -315,10 +319,22 @@ export default function Options() {
               borderRadius: 6,
               fontSize: 13,
               outline: "none",
+              background: "white",
+              transition: "all 0.15s ease",
             }}
           />
           <button
             onClick={handleAddDomain}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#1d4ed8";
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = "0 4px 10px rgba(37, 99, 235, 0.25)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#3b82f6";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
             style={{
               padding: "8px 16px",
               background: "#3b82f6",
@@ -328,6 +344,7 @@ export default function Options() {
               cursor: "pointer",
               fontSize: 13,
               fontFamily: "inherit",
+              transition: "all 0.15s ease",
             }}
           >
             {t.add}
@@ -376,7 +393,19 @@ export default function Options() {
       {/* Clear Data */}
       <Section title={t.options.dataManagement}>
         <button
-          onClick={handleClearData}
+          onClick={() => setShowClearConfirm(true)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#fee2e2";
+            e.currentTarget.style.borderColor = "#fca5a5";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 4px 10px rgba(220, 38, 38, 0.15)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "#fef2f2";
+            e.currentTarget.style.borderColor = "#fecaca";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
           style={{
             padding: "10px 20px",
             background: "#fef2f2",
@@ -387,6 +416,7 @@ export default function Options() {
             fontSize: 13,
             fontFamily: "inherit",
             fontWeight: 600,
+            transition: "all 0.15s ease",
           }}
         >
           {t.options.clearAll}
@@ -405,6 +435,102 @@ export default function Options() {
       <div style={{ marginTop: 32, textAlign: "center", fontSize: 12, color: "#9ca3af" }}>
         {t.footer}
       </div>
+
+      {/* Disable "Tehlike Uyarıları" confirmation — same dialog as the popup.
+          Prominent green "keep protection" button, dim "disable" text link. */}
+      {showDisableNotif && (
+        <ConfirmModal
+          title={t.confirmDisableNotif.message}
+          body={t.confirmDisableNotif.detail}
+        >
+          <button
+            onClick={() => setShowDisableNotif(false)}
+            style={{
+              width: "100%",
+              padding: "11px 0",
+              background: "#16a34a",
+              border: "none",
+              borderRadius: 8,
+              color: "white",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              marginBottom: 10,
+            }}
+          >
+            {t.confirmDisableNotif.keep}
+          </button>
+          <button
+            onClick={() => {
+              saveSettings({ ...settings, showDomWarnings: false });
+              setShowDisableNotif(false);
+            }}
+            style={{
+              width: "100%",
+              padding: "6px 0",
+              background: "none",
+              border: "none",
+              color: "#9ca3af",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {t.confirmDisableNotif.disable}
+          </button>
+        </ConfirmModal>
+      )}
+
+      {/* Clear-all confirmation modal — destructive action gated behind an
+          explicit confirm. Neutral "cancel" + red "confirm" buttons. */}
+      {showClearConfirm && (
+        <ConfirmModal
+          title={t.confirmClearData.message}
+          body={t.confirmClearData.detail}
+        >
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => setShowClearConfirm(false)}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                background: "#f3f4f6",
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                color: "#374151",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {t.confirmClearData.cancel}
+            </button>
+            <button
+              onClick={() => {
+                handleClearData();
+                setShowClearConfirm(false);
+              }}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                background: "#dc2626",
+                border: "none",
+                borderRadius: 8,
+                color: "white",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {t.confirmClearData.confirm}
+            </button>
+          </div>
+        </ConfirmModal>
+      )}
     </div>
   );
 }
