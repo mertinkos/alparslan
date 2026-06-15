@@ -478,6 +478,7 @@ export function checkTyposquatting(
 export function checkUrl(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
+  heuristics: ExtensionSettings["heuristicsEnabled"]
 ): ThreatResult {
   const canonical = canonicalizeUrl(url);
   const domain = canonical.hostname;
@@ -524,52 +525,55 @@ export function checkUrl(
     return { level: ThreatLevel.UNKNOWN, score: 0, reasons: [], url, checkedAt: now };
   }
 
-  // Medium + High: typosquatting check
-  const typo = checkTyposquatting(domain, canonical);
-  if (typo.isSuspicious) {
-    const reasonLabels: Record<string, { score: number; text: string }> = {
-      "homoglyph": { score: 100, text: t.reasons.homoglyph },
-      "edit-distance": { score: 70, text: t.reasons.editDistance },
-      "tld-mismatch": { score: 60, text: t.reasons.tldMismatch },
-      "contains-trusted-name": { score: 50, text: t.reasons.containsTrusted },
-      "subdomain-impersonation": { score: 65, text: t.reasons.subdomainImpersonation },
-      "subdomain-typosquat": { score: 55, text: t.reasons.subdomainTyposquat },
-    };
-    const match = reasonLabels[typo.reason ?? ""] ?? { score: 70, text: t.reasons.similarDomain };
-    score += match.score;
-    reasons.push(`${typo.similarTo} ile ${match.text}`);
-  }
-
-  if (SUSPICIOUS_KEYWORDS.some((kw) => domain.includes(kw))) {
-    if (!TRUSTED_DOMAINS.has(rootDomain)) {
-      score += 20;
-      reasons.push(t.reasons.suspiciousKeyword);
+  if (heuristics) {
+    // Medium + High: typosquatting check
+    const typo = checkTyposquatting(domain, canonical);
+    if (typo.isSuspicious) {
+      const reasonLabels: Record<string, { score: number; text: string }> = {
+        "homoglyph": { score: 100, text: t.reasons.homoglyph },
+        "edit-distance": { score: 70, text: t.reasons.editDistance },
+        "tld-mismatch": { score: 60, text: t.reasons.tldMismatch },
+        "contains-trusted-name": { score: 50, text: t.reasons.containsTrusted },
+        "subdomain-impersonation": { score: 65, text: t.reasons.subdomainImpersonation },
+        "subdomain-typosquat": { score: 55, text: t.reasons.subdomainTyposquat },
+      };
+      const match = reasonLabels[typo.reason ?? ""] ?? { score: 70, text: t.reasons.similarDomain };
+      score += match.score;
+      reasons.push(`${typo.similarTo} ile ${match.text}`);
     }
-  }
 
-  // Medium + High: IP-based URL check
-  if (domain.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-    score += 30;
-    reasons.push(t.reasons.ipAccess);
-  }
+    if (SUSPICIOUS_KEYWORDS.some((kw) => domain.includes(kw))) {
+      if (!TRUSTED_DOMAINS.has(rootDomain)) {
+        score += 20;
+        reasons.push(t.reasons.suspiciousKeyword);
+      }
+    }
 
-  // Medium + High: excessive subdomain check
-  const subdomainCount = canonical.subdomain ? canonical.subdomain.split(".").length : 0;
-  if (subdomainCount > 3) {
-    score += 15;
-    reasons.push(t.reasons.excessiveSubdomains);
-  }
+    // Medium + High: IP-based URL check
+    if (domain.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+      score += 30;
+      reasons.push(t.reasons.ipAccess);
+    }
 
-  // Medium + High: risky TLD check
-  const riskyTld = getRiskyTld(domain);
-  if (riskyTld) {
-    score += 15;
-    reasons.push(t.reasons.riskyTld(riskyTld));
-  }
+    // Medium + High: excessive subdomain check
+    const subdomainCount = canonical.subdomain ? canonical.subdomain.split(".").length : 0;
+    if (subdomainCount > 3) {
+      score += 15;
+      reasons.push(t.reasons.excessiveSubdomains);
+    }
 
-  // High protection: lower thresholds for more aggressive detection
-  const dangerousThreshold = protectionLevel === "high" ? 50 : 70;
-  const suspiciousThreshold = protectionLevel === "high" ? 15 : 30;
+    // Medium + High: risky TLD check
+    const riskyTld = getRiskyTld(domain);
+    if (riskyTld) {
+      score += 15;
+      reasons.push(t.reasons.riskyTld(riskyTld));
+    }
+
+    // High protection: lower thresholds for more aggressive detection
+    const dangerousThreshold = protectionLevel === "high" ? 50 : 70;
+    const suspiciousThreshold = protectionLevel === "high" ? 15 : 30;
+
+  }
 
   // Determine threat level
   let level: ThreatLevel;
