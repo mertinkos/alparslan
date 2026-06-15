@@ -598,7 +598,7 @@ export function checkUrl(
 export async function checkUrlConfirmed(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
-  heuristics: ExtensionSettings["heuristicsEnabled"] = false,
+  heuristics: ExtensionSettings["heuristicsEnabled"],
 ): Promise<ThreatResult> {
   const result = checkUrl(url, protectionLevel, heuristics);
 
