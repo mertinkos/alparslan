@@ -4,8 +4,10 @@
 const tr = {
   // --- Genel ---
   appName: "Alparslan",
-  version: "v0.1.0",
-  footer: "Alparslan v0.1.0",
+  // Surum etiketi manifest.json'dan okunur (chrome.runtime.getManifest().version);
+  // i18n burada sadece "Alparslan v{x.y.z}" formatini tutar — release'lerde
+  // string'i unutmak yok, manifest tek kaynak.
+  footer: (version: string) => `Alparslan v${version}`,
   close: "Kapat",
   add: "Ekle",
   send: "Gönder",
@@ -224,7 +226,7 @@ const tr = {
     // didn't scan it, they vouched for it, so we acknowledge that instead of
     // claiming we scanned it. Keep the "iyi gezintiler" keyword: StatusPanel
     // bolds it as the highlight word.
-    whitelisted: (domain: string) => `${domain} sayfasını güvenilir bağlantılarınıza eklemişsiniz. Burada gönlünüz rahat olsun — iyi gezintiler!`,
+    whitelisted: (domain: string) => `${domain} sitesini güvendiğiniz bağlantılara eklediniz, iyi gezintiler!`,
     // Aksiyon paneli — risk taşıyan durumlarda balonun altında çıkar.
     actionPrompt: "Dilerseniz güvenliğiniz için aşağıdaki adımlardan birini seçebilirsiniz:",
     actionClose: "Sayfadan Ayrıl",
@@ -262,11 +264,10 @@ const tr = {
     welcomeLink: "Buraya",
     welcomeLinkTitle: "Dijital Savunma sitesine git",
     welcomeSuffix: " tıklayarak benimle ilgili bilgilere ulaşabilirsiniz.",
-    todayPrefix: "Bugün sizin için ",
+    todayPrefix: "Şu ana kadar sizin için ",
     todayChecked: " kontrol yaptım.",
     todayThreats: " tehdit buldum.",
-    todayTrackers: " takipçi buldum.",
-    todayUnknowns: " şüpheli kayıt tespit ettim.",
+    todayUnknowns: " potansiyel risk tespit ettim.",
     protectedDays: (n: number) => `${n} gündür korunuyorsunuz`,
     glossary: {
       controlLabel: "Kontrol",
@@ -285,9 +286,7 @@ const tr = {
       blacklistDesc: "Riskli veya engellenmesini istediğiniz sitelerin tutulduğu listedir.",
       threatLabel: "Tehdit",
       threatDesc: "Zararlı, şüpheli veya kullanıcı güvenliğini riske atabilecek bağlantıları ifade eder.",
-      trackerLabel: "Takipçi",
-      trackerDesc: "Sitelerdeki takip mekanizmalarıdır. Kullanıcı davranışlarını izleyebilir.",
-      unknownLabel: "Şüpheli",
+      unknownLabel: "Potansiyel Risk",
       unknownDesc: "Sistemin kesin olarak güvenli veya riskli sınıflandıramadığı bağlantıları gösterir. İsterseniz bu siteleri ayarlar kısmından güvendiğiniz bağlantılara ekleyebilirsiniz.",
     },
   },
