@@ -478,7 +478,7 @@ export function checkTyposquatting(
 export function checkUrl(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
-  heuristics: ExtensionSettings["heuristicsEnabled"]
+  heuristics: ExtensionSettings["heuristicsEnabled"] = false,
 ): ThreatResult {
   const canonical = canonicalizeUrl(url);
   const domain = canonical.hostname;
@@ -570,17 +570,17 @@ export function checkUrl(
       reasons.push(t.reasons.riskyTld(riskyTld));
     }
 
-    // High protection: lower thresholds for more aggressive detection
-    const dangerousThreshold = protectionLevel === "high" ? 50 : 70;
-    const suspiciousThreshold = protectionLevel === "high" ? 15 : 30;
-
   }
+
+  // High protection: lower thresholds for more aggressive detection
+  const dangerousThreshold = protectionLevel === "high" ? 50 : 70;
+  const suspiciousThreshold = protectionLevel === "high" ? 15 : 30;
 
   // Determine threat level
   let level: ThreatLevel;
-  if (score >= dangerousThreshold) {
+  if (heuristics && score >= dangerousThreshold) {
     level = ThreatLevel.DANGEROUS;
-  } else if (score >= suspiciousThreshold) {
+  } else if (heuristics && score >= suspiciousThreshold) {
     level = ThreatLevel.SUSPICIOUS;
   } else if (TRUSTED_DOMAINS.has(rootDomain)) {
     level = ThreatLevel.SAFE;
@@ -598,7 +598,7 @@ export function checkUrl(
 export async function checkUrlConfirmed(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
-  heuristics: ExtensionSettings["heuristicsEnabled"]
+  heuristics: ExtensionSettings["heuristicsEnabled"] = false,
 ): Promise<ThreatResult> {
   const result = checkUrl(url, protectionLevel, heuristics);
 
