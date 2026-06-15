@@ -129,6 +129,8 @@ const tr = {
     blacklistCount: (n: number) => `Engellediğim Bağlantılar: ${n} domain`,
     whitelistCount: (n: number) => `Güvendiğim Bağlantılar: ${n} domain`,
     allSettings: "Tüm Ayarlar",
+    heuristicsEnabled: "Heuristik Tespit (Developer)",
+
   },
 
   // --- Tehlike uyarilarini kapatma onayi (popup) ---
