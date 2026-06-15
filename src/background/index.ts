@@ -248,7 +248,7 @@ async function initServiceWorker(): Promise<void> {
       if (!tab.id || !tab.url || tab.url.startsWith("chrome") || tab.url.startsWith("about:")) continue;
       // evaluateTab() (whitelist + USOM-confirmed) — never the raw checkUrl(),
       // whose unconfirmed Bloom-filter hit would flash a false danger banner.
-      const result = await evaluateTab(tab.url, DEFAULT_SETTINGS.heuristicsEnabled);
+      const result = await evaluateTab(tab.url, state.settings.heuristicsEnabled);
       updateBadge(tab.id, result.level);
 
       // Push warning directly for dangerous tabs (backup to RESCAN pull)
@@ -470,7 +470,7 @@ chrome.runtime.onMessage.addListener(
         // Single verdict path (whitelist short-circuit + USOM-confirmed check),
         // shared with the badge/banner paths via evaluateTab() so the popup and
         // the page banner can never disagree.
-        const result = await evaluateTab(url, DEFAULT_SETTINGS.heuristicsEnabled);
+        const result = await evaluateTab(url, state.settings.heuristicsEnabled);
         if (result.level === "DANGEROUS" || result.level === "SUSPICIOUS") {
           state.stats.threatsBlocked++;
         }
@@ -846,7 +846,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     (async () => {
       if (!initDone) await initReady;
-      const result = await evaluateTab(url, DEFAULT_SETTINGS.heuristicsEnabled);
+      const result = await evaluateTab(url, state.settings.heuristicsEnabled);
       updateBadge(tabId, result.level);
 
       if ((result.level === "DANGEROUS" || result.level === "SUSPICIOUS") && state.settings.showDomWarnings !== false) {
