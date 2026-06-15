@@ -525,6 +525,7 @@ export function checkUrl(
     return { level: ThreatLevel.UNKNOWN, score: 0, reasons: [], url, checkedAt: now };
   }
 
+  // Medium and High level checkings are executed if heuristics settings is enabled.
   if (heuristics) {
     // Medium + High: typosquatting check
     const typo = checkTyposquatting(domain, canonical);
@@ -597,8 +598,9 @@ export function checkUrl(
 export async function checkUrlConfirmed(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
+  heuristics: ExtensionSettings["heuristicsEnabled"]
 ): Promise<ThreatResult> {
-  const result = checkUrl(url, protectionLevel);
+  const result = checkUrl(url, protectionLevel, heuristics);
 
   // If the sync check flagged it as USOM, confirm via IndexedDB
   if (result.level === ThreatLevel.DANGEROUS && result.reasons.includes(t.reasons.usomListed)) {
