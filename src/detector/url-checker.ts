@@ -587,59 +587,35 @@ export function checkUrl(
 }
 
 /**
- * Async version that checks the canonical domain against the USOM API.
+ * Async version that confirms USOM Bloom filter hits against the USOM API.
+ * Use this when you need zero false positives (e.g. before showing a warning).
  */
 export async function checkUrlConfirmed(
   url: string,
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
 ): Promise<ThreatResult> {
   const result = checkUrl(url, protectionLevel);
-  const canonical = canonicalizeUrl(url);
-  const domain = canonical.hostname;
-  if (!domain) return result;
 
-  const rootDomain = canonical.registrableDomain ?? domain;
-  const apiListed = await isDomainListedByUsomApi(domain, rootDomain);
+  if (result.level === ThreatLevel.DANGEROUS && result.reasons.includes(t.reasons.usomListed)) {
+    const domain = extractDomain(url);
+    if (domain) {
+      const rootDomain = extractRootDomain(domain);
+      const domainVerdict = await checkDomain(domain);
+      const rootVerdict =
+        rootDomain === domain ? domainVerdict : await checkDomain(rootDomain);
+      const confirmed = domainVerdict.verdict === true || rootVerdict.verdict === true;
 
-  if (apiListed === true) {
-    return {
-      ...result,
-      level: ThreatLevel.DANGEROUS,
-      score: 100,
-      reasons: result.reasons.includes(t.reasons.usomListed)
-        ? result.reasons
-        : [...result.reasons, t.reasons.usomListed],
-    };
+      if (!confirmed) {
+        const filteredReasons = result.reasons.filter((reason) => reason !== t.reasons.usomListed);
+        return {
+          ...result,
+          level: filteredReasons.length > 0 ? result.level : ThreatLevel.UNKNOWN,
+          score: filteredReasons.length > 0 ? result.score : 0,
+          reasons: filteredReasons,
+        };
+      }
+    }
   }
 
-  return result.reasons.includes(t.reasons.usomListed)
-    ? removeUsomVerdict(result)
-    : result;
-}
-
-async function isDomainListedByUsomApi(
-  domain: string,
-  rootDomain: string,
-): Promise<boolean | null> {
-  // Check the full hostname first, then its registrable domain
-  const domainResult = await checkDomain(domain);
-  if (domainResult.verdict === true || rootDomain === domain) {
-    return domainResult.verdict;
-  }
-
-  const rootResult = await checkDomain(rootDomain);
-  if (rootResult.verdict === true) return true;
-  if (domainResult.verdict === null || rootResult.verdict === null) return null;
-  return false;
-}
-
-// Remove a USOM verdict that is not confirmed by the API
-function removeUsomVerdict(result: ThreatResult): ThreatResult {
-  const reasons = result.reasons.filter((reason) => reason !== t.reasons.usomListed);
-  return {
-    ...result,
-    level: reasons.length > 0 ? result.level : ThreatLevel.UNKNOWN,
-    score: reasons.length > 0 ? result.score : 0,
-    reasons,
-  };
+  return result;
 }
