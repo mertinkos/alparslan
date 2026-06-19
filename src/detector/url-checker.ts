@@ -1,8 +1,9 @@
 import { ThreatLevel, type ThreatResult, type ExtensionSettings } from "@/utils/types";
 import { isBlacklisted } from "@/storage/list-cache";
-import { usomBloomTest } from "@/blocklist/usom-updater";
+import { isUsomReady, usomBloomTest } from "@/blocklist/usom-updater";
 import { hasDomain } from "@/blocklist/indexeddb-store";
 import { isDynamicWhitelisted, isUgcDomain, getRiskyTld } from "@/blocklist/whitelist-updater";
+import { checkDomain } from "@/api/usom/service";
 import t from "@/i18n/tr";
 import { canonicalizeUrl } from "@/detector/url-canonicalizer";
 
@@ -595,25 +596,70 @@ export async function checkUrlConfirmed(
   protectionLevel: ExtensionSettings["protectionLevel"] = "medium",
 ): Promise<ThreatResult> {
   const result = checkUrl(url, protectionLevel);
+  const canonical = canonicalizeUrl(url);
+  const domain = canonical.hostname;
+  if (!domain) return result;
 
-  // If the sync check flagged it as USOM, confirm via IndexedDB
-  if (result.level === ThreatLevel.DANGEROUS && result.reasons.includes(t.reasons.usomListed)) {
-    const domain = extractDomain(url);
-    if (domain) {
-      const rootDomain = extractRootDomain(domain);
-      const confirmed = await hasDomain(domain) || await hasDomain(rootDomain);
-      if (!confirmed) {
-        // Bloom filter false positive — re-run without USOM flag
-        const filteredReasons = result.reasons.filter((r) => r !== t.reasons.usomListed);
-        return {
-          ...result,
-          level: filteredReasons.length > 0 ? result.level : ThreatLevel.UNKNOWN,
-          score: filteredReasons.length > 0 ? result.score : 0,
-          reasons: filteredReasons,
-        };
-      }
+  const rootDomain = canonical.registrableDomain ?? domain;
+  const hasUsomReason = result.reasons.includes(t.reasons.usomListed);
+
+  if (hasUsomReason) {
+    let confirmedLocally = false;
+    try {
+      confirmedLocally =
+        (await hasDomain(domain)) ||
+        (rootDomain !== domain && (await hasDomain(rootDomain)));
+    } catch {
+      // IndexedDB may be temporarily unavailable; the API remains a fallback.
+    }
+
+    if (confirmedLocally) return result;
+
+    const apiListed = await isDomainListedByUsomApi(domain, rootDomain);
+    if (apiListed === true) return result;
+
+    return removeUsomVerdict(result);
+  }
+
+  // A Bloom miss is definitive only after the filter has initialized.
+  if (!isUsomReady()) {
+    const apiListed = await isDomainListedByUsomApi(domain, rootDomain);
+    if (apiListed === true) {
+      return {
+        ...result,
+        level: ThreatLevel.DANGEROUS,
+        score: 100,
+        reasons: [...result.reasons, t.reasons.usomListed],
+      };
     }
   }
 
   return result;
+}
+
+async function isDomainListedByUsomApi(
+  domain: string,
+  rootDomain: string,
+): Promise<boolean | null> {
+  // Check the full hostname first, then its registrable domain
+  const domainResult = await checkDomain(domain);
+  if (domainResult.verdict === true || rootDomain === domain) {
+    return domainResult.verdict;
+  }
+
+  const rootResult = await checkDomain(rootDomain);
+  if (rootResult.verdict === true) return true;
+  if (domainResult.verdict === null || rootResult.verdict === null) return null;
+  return false;
+}
+
+// Remove an unconfirmed Bloom filter verdict from the final result
+function removeUsomVerdict(result: ThreatResult): ThreatResult {
+  const reasons = result.reasons.filter((reason) => reason !== t.reasons.usomListed);
+  return {
+    ...result,
+    level: reasons.length > 0 ? result.level : ThreatLevel.UNKNOWN,
+    score: reasons.length > 0 ? result.score : 0,
+    reasons,
+  };
 }
